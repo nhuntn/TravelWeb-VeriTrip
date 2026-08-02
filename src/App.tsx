@@ -371,6 +371,7 @@ export default function App() {
           onResetData={handleResetData}
           onLogout={handleLogout}
           onOpenAuth={() => setIsAuthModalOpen(true)}
+          onUpdateUser={reloadStoreData}
         />
       )}
 
