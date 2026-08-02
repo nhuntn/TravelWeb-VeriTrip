@@ -1,0 +1,11 @@
+{
+  "name": "Remix VeriTrip AI",
+  "description": "Smart travel PWA using Gemini AI to filter fake reviews and provide authentic location-based recommendations via Google Maps.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
