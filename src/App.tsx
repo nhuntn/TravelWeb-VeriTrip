@@ -56,10 +56,19 @@ export default function App() {
     requestBrowserGeolocation();
   }, []);
 
-  const reloadStoreData = () => {
-    setPlaces(getPlaces());
-    setReviews(getReviews());
-    setCurrentUser(getCurrentUser());
+  const reloadStoreData = async () => {
+    try {
+      const [fetchedPlaces, fetchedReviews, fetchedUser] = await Promise.all([
+        getPlaces(),
+        getReviews(),
+        getCurrentUser(),
+      ]);
+      setPlaces(fetchedPlaces);
+      setReviews(fetchedReviews);
+      setCurrentUser(fetchedUser);
+    } catch (err) {
+      console.error('Error loading store data:', err);
+    }
   };
 
   // Browser Geolocation API
@@ -89,23 +98,24 @@ export default function App() {
     setLocationName(cityName);
   };
 
-  const handleSwitchUser = (uid: string) => {
-    setCurrentUserId(uid);
-    setCurrentUser(getCurrentUser());
+  const handleSwitchUser = async (uid: string) => {
+    await setCurrentUserId(uid);
+    const user = await getCurrentUser();
+    setCurrentUser(user);
   };
 
-  const handleLogout = () => {
-    logoutUser();
+  const handleLogout = async () => {
+    await logoutUser();
+    await reloadStoreData();
+  };
+
+  const handleLoginSuccess = (_user: User) => {
     reloadStoreData();
   };
 
-  const handleLoginSuccess = (user: User) => {
-    reloadStoreData();
-  };
-
-  const handleResetData = () => {
-    resetDemoData();
-    reloadStoreData();
+  const handleResetData = async () => {
+    await resetDemoData();
+    await reloadStoreData();
   };
 
   const selectedPlaceReviews = selectedPlace

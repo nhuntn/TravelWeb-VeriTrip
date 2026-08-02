@@ -1,69 +1,153 @@
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+} from 'firebase/auth';
+import {
+  getFirestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+} from 'firebase/firestore';
 import { INITIAL_PLACES, INITIAL_REVIEWS, INITIAL_USERS } from '../data/initialData';
 import { AIAnalysisResult, Place, Review, User } from '../types';
 
-const STORAGE_KEYS = {
-  USERS: 'travelweb_users_v1',
-  PLACES: 'travelweb_places_v1',
-  REVIEWS: 'travelweb_reviews_v1',
-  CURRENT_USER_ID: 'travelweb_current_user_id_v2',
+// 1. Initialize Firebase App using Environment Variables
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'travelweb-demo.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'travelweb-demo',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'travelweb-demo.appspot.com',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef123456',
 };
 
-// Initialize localStorage if empty
-export function initStore() {
-  if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.PLACES)) {
-    localStorage.setItem(STORAGE_KEYS.PLACES, JSON.stringify(INITIAL_PLACES));
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.REVIEWS)) {
-    localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(INITIAL_REVIEWS));
-  }
-  if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'guest'); // Default logged out (guest)
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+
+// 2. Collections Setup
+const USERS_COL = 'users';
+const PLACES_COL = 'places';
+const REVIEWS_COL = 'reviews';
+
+let currentSessionUserId: string | null = 'guest';
+
+// Helper to auto-seed initial data to Firestore if collection is empty
+export async function seedInitialDataIfEmpty(): Promise<void> {
+  try {
+    const placesSnap = await getDocs(collection(db, PLACES_COL));
+    if (placesSnap.empty) {
+      for (const place of INITIAL_PLACES) {
+        await setDoc(doc(db, PLACES_COL, place.placeId), place);
+      }
+    }
+    const usersSnap = await getDocs(collection(db, USERS_COL));
+    if (usersSnap.empty) {
+      for (const user of INITIAL_USERS) {
+        await setDoc(doc(db, USERS_COL, user.uid), user);
+      }
+    }
+    const reviewsSnap = await getDocs(collection(db, REVIEWS_COL));
+    if (reviewsSnap.empty) {
+      for (const review of INITIAL_REVIEWS) {
+        await setDoc(doc(db, REVIEWS_COL, review.reviewId), review);
+      }
+    }
+  } catch (err) {
+    console.warn('Firebase initial seed notice:', err);
   }
 }
 
-// User methods
-export function getUsers(): User[] {
-  initStore();
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
-}
+// -------------------------------------------------------------
+// USER METHODS
+// -------------------------------------------------------------
 
-export function getCurrentUser(): User | null {
-  initStore();
-  const currentId = localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID);
-  if (!currentId || currentId === 'guest') return null;
-
-  const users = getUsers();
-  let user = users.find((u) => u.uid === currentId) || null;
-
-  // Check ban status if strikes > 5
-  if (user && user.strikes > 5 && !user.isBanned) {
-    const banDate = new Date();
-    banDate.setDate(banDate.getDate() + 180); // 6 months ban
-    user.isBanned = true;
-    user.banUntil = banDate.toISOString();
-    updateUser(user);
+export async function getUsers(): Promise<User[]> {
+  try {
+    const snap = await getDocs(collection(db, USERS_COL));
+    if (snap.empty) {
+      await seedInitialDataIfEmpty();
+      const retrySnap = await getDocs(collection(db, USERS_COL));
+      return retrySnap.docs.map((docSnap) => docSnap.data() as User);
+    }
+    return snap.docs.map((docSnap) => docSnap.data() as User);
+  } catch (error) {
+    console.error('Error fetching users from Firestore:', error);
+    return INITIAL_USERS;
   }
-
-  return user;
 }
 
-export function setCurrentUserId(uid: string) {
-  initStore();
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, uid);
+export async function getCurrentUser(): Promise<User | null> {
+  const firebaseUser = auth.currentUser;
+  const targetUid = firebaseUser ? firebaseUser.uid : currentSessionUserId;
+
+  if (!targetUid || targetUid === 'guest') return null;
+
+  try {
+    const userDocRef = doc(db, USERS_COL, targetUid);
+    const userDoc = await getDoc(userDocRef);
+
+    let user: User | null = null;
+    if (userDoc.exists()) {
+      user = userDoc.data() as User;
+    } else {
+      const users = await getUsers();
+      user = users.find((u) => u.uid === targetUid) || null;
+    }
+
+    if (user && user.strikes > 5 && !user.isBanned) {
+      const banDate = new Date();
+      banDate.setDate(banDate.getDate() + 180); // 6 months ban
+      user.isBanned = true;
+      user.banUntil = banDate.toISOString();
+      await updateUser(user);
+    }
+
+    return user;
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    return null;
+  }
 }
 
-export function logoutUser() {
-  initStore();
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'guest');
+export async function setCurrentUserId(uid: string): Promise<void> {
+  currentSessionUserId = uid;
 }
 
-export function loginUser(email: string, password?: string): User {
-  initStore();
-  const users = getUsers();
+export async function logoutUser(): Promise<void> {
+  currentSessionUserId = 'guest';
+  try {
+    await signOut(auth);
+  } catch (err) {
+    console.error('Error during logout:', err);
+  }
+}
+
+export async function loginUser(email: string, password?: string): Promise<User> {
   const normalizedEmail = email.trim().toLowerCase();
+  const pwd = password || '123456';
+
+  let authUid: string | null = null;
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
+    authUid = userCredential.user.uid;
+  } catch (authErr: any) {
+    if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
+      try {
+        const newUserCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
+        authUid = newUserCredential.user.uid;
+      } catch {
+        // Fallback if email already exists in auth or auth is disabled
+      }
+    }
+  }
+
+  const users = await getUsers();
   let user = users.find((u) => u.email.toLowerCase() === normalizedEmail);
 
   if (user) {
@@ -71,42 +155,55 @@ export function loginUser(email: string, password?: string): User {
       throw new Error('Mật khẩu không chính xác.');
     }
   } else {
-    // If user does not exist yet, auto-create a user profile for smooth login
     const username = email.split('@')[0];
+    const uid = authUid || 'user_' + Date.now();
     user = {
-      uid: 'user_' + Date.now(),
+      uid,
       email: email.trim(),
       username: username.charAt(0).toUpperCase() + username.slice(1),
-      password: password || '123456',
+      password: pwd,
       avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
       strikes: 0,
       isBanned: false,
       banUntil: null,
       role: 'user',
     };
-    users.push(user);
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    await setDoc(doc(db, USERS_COL, user.uid), user);
   }
 
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, user.uid);
+  currentSessionUserId = user.uid;
   return user;
 }
 
-export function registerUser(data: { username: string; email: string; password?: string; avatar?: string }): User {
-  initStore();
-  const users = getUsers();
+export async function registerUser(data: {
+  username: string;
+  email: string;
+  password?: string;
+  avatar?: string;
+}): Promise<User> {
   const normalizedEmail = data.email.trim().toLowerCase();
+  const pwd = data.password || '123456';
 
+  const users = await getUsers();
   const existing = users.find((u) => u.email.toLowerCase() === normalizedEmail);
   if (existing) {
     throw new Error('Email này đã được đăng ký. Vui lòng sử dụng tính năng Đăng nhập.');
   }
 
+  let authUid: string | null = null;
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
+    authUid = userCredential.user.uid;
+  } catch (err) {
+    console.warn('Firebase Auth registration notice:', err);
+  }
+
+  const uid = authUid || 'user_' + Date.now();
   const newUser: User = {
-    uid: 'user_' + Date.now(),
+    uid,
     email: data.email.trim(),
     username: data.username.trim(),
-    password: data.password || '123456',
+    password: pwd,
     avatar:
       data.avatar ||
       `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
@@ -116,73 +213,112 @@ export function registerUser(data: { username: string; email: string; password?:
     role: 'user',
   };
 
-  users.push(newUser);
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, newUser.uid);
-
+  await setDoc(doc(db, USERS_COL, newUser.uid), newUser);
+  currentSessionUserId = newUser.uid;
   return newUser;
 }
 
-export function updateUser(updatedUser: User) {
-  const users = getUsers();
-  const index = users.findIndex((u) => u.uid === updatedUser.uid);
-  if (index !== -1) {
-    users[index] = updatedUser;
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+export async function updateUser(updatedUser: User): Promise<void> {
+  try {
+    await setDoc(doc(db, USERS_COL, updatedUser.uid), updatedUser, { merge: true });
+  } catch (error) {
+    console.error('Error updating user in Firestore:', error);
   }
 }
 
-// Places methods
-export function getPlaces(): Place[] {
-  initStore();
-  const places: Place[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.PLACES) || '[]');
-  const reviews: Review[] = getReviews();
+// -------------------------------------------------------------
+// PLACES METHODS
+// -------------------------------------------------------------
 
-  // Re-calculate trust score & average rating dynamically
-  return places.map((place) => {
-    const placeReviews = reviews.filter((r) => r.placeId === place.placeId);
-    if (placeReviews.length === 0) return place;
+export async function getPlaces(): Promise<Place[]> {
+  try {
+    const placesSnap = await getDocs(collection(db, PLACES_COL));
+    let places: Place[] = [];
 
-    const cleanReviews = placeReviews.filter((r) => !r.isSeeding);
-    const avgRating = cleanReviews.length > 0
-      ? Number((cleanReviews.reduce((sum, r) => sum + r.rating, 0) / cleanReviews.length).toFixed(1))
-      : place.averageRating;
+    if (placesSnap.empty) {
+      await seedInitialDataIfEmpty();
+      const retrySnap = await getDocs(collection(db, PLACES_COL));
+      places = retrySnap.docs.map((docSnap) => docSnap.data() as Place);
+    } else {
+      places = placesSnap.docs.map((docSnap) => docSnap.data() as Place);
+    }
 
-    const trustScore = Math.max(0, Math.round(((placeReviews.length - (placeReviews.length - cleanReviews.length)) / placeReviews.length) * 100));
+    const reviews = await getReviews();
 
-    return {
-      ...place,
-      reviewCount: placeReviews.length,
-      averageRating: avgRating,
-      trustScore,
-    };
-  });
+    // Re-calculate trust score & average rating dynamically
+    return places.map((place) => {
+      const placeReviews = reviews.filter((r) => r.placeId === place.placeId);
+      if (placeReviews.length === 0) return place;
+
+      const cleanReviews = placeReviews.filter((r) => !r.isSeeding);
+      const avgRating =
+        cleanReviews.length > 0
+          ? Number((cleanReviews.reduce((sum, r) => sum + r.rating, 0) / cleanReviews.length).toFixed(1))
+          : place.averageRating;
+
+      const trustScore = Math.max(
+        0,
+        Math.round(((placeReviews.length - (placeReviews.length - cleanReviews.length)) / placeReviews.length) * 100)
+      );
+
+      return {
+        ...place,
+        reviewCount: placeReviews.length,
+        averageRating: avgRating,
+        trustScore,
+      };
+    });
+  } catch (error) {
+    console.error('Error fetching places from Firestore:', error);
+    return INITIAL_PLACES;
+  }
 }
 
-export function addPlace(newPlaceData: Omit<Place, 'placeId' | 'reviewCount' | 'createdAt' | 'trustScore' | 'averageRating'>): Place {
-  const places = getPlaces();
+export async function addPlace(
+  newPlaceData: Omit<Place, 'placeId' | 'reviewCount' | 'createdAt' | 'trustScore' | 'averageRating'>
+): Promise<Place> {
+  const placeId = 'place_' + Date.now();
   const newPlace: Place = {
     ...newPlaceData,
-    placeId: 'place_' + Date.now(),
+    placeId,
     averageRating: 5.0,
     reviewCount: 0,
     createdAt: new Date().toISOString(),
     trustScore: 100,
   };
 
-  places.unshift(newPlace);
-  localStorage.setItem(STORAGE_KEYS.PLACES, JSON.stringify(places));
+  await setDoc(doc(db, PLACES_COL, placeId), newPlace);
   return newPlace;
 }
 
-// Reviews methods
-export function getReviews(placeId?: string): Review[] {
-  initStore();
-  const reviews: Review[] = JSON.parse(localStorage.getItem(STORAGE_KEYS.REVIEWS) || '[]');
-  if (placeId) {
-    return reviews.filter((r) => r.placeId === placeId);
+// -------------------------------------------------------------
+// REVIEWS METHODS
+// -------------------------------------------------------------
+
+export async function getReviews(placeId?: string): Promise<Review[]> {
+  try {
+    const reviewsSnap = await getDocs(collection(db, REVIEWS_COL));
+    let reviews: Review[] = [];
+
+    if (reviewsSnap.empty) {
+      await seedInitialDataIfEmpty();
+      const retrySnap = await getDocs(collection(db, REVIEWS_COL));
+      reviews = retrySnap.docs.map((docSnap) => docSnap.data() as Review);
+    } else {
+      reviews = reviewsSnap.docs.map((docSnap) => docSnap.data() as Review);
+    }
+
+    // Sort descending by creation date
+    reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    if (placeId) {
+      return reviews.filter((r) => r.placeId === placeId);
+    }
+    return reviews;
+  } catch (error) {
+    console.error('Error fetching reviews from Firestore:', error);
+    return INITIAL_REVIEWS;
   }
-  return reviews;
 }
 
 // Core AI Anti-Seeding Review submission logic
@@ -192,13 +328,17 @@ export async function submitReviewWithAI(
   rating: number,
   content: string
 ): Promise<{ review: Review; aiAnalysis: AIAnalysisResult; userStatusUpdated: User | null }> {
-  const currentUser = getCurrentUser();
+  const currentUser = await getCurrentUser();
   if (!currentUser) {
     throw new Error('Bạn cần đăng nhập để gửi đánh giá.');
   }
 
   if (currentUser.isBanned) {
-    throw new Error(`Tài khoản của bạn đã bị khóa đến ngày ${new Date(currentUser.banUntil || '').toLocaleDateString('vi-VN')} do vi phạm điều khoản quy định (strikes > 5).`);
+    throw new Error(
+      `Tài khoản của bạn đã bị khóa đến ngày ${new Date(
+        currentUser.banUntil || ''
+      ).toLocaleDateString('vi-VN')} do vi phạm điều khoản quy định (strikes > 5).`
+    );
   }
 
   // 1. Call AI Anti-Seeding endpoint
@@ -213,7 +353,6 @@ export async function submitReviewWithAI(
     aiAnalysis = await res.json();
   } catch (err: any) {
     console.warn('Falling back to local AI analysis:', err);
-    // Local pattern fallback if network error
     const isSeeding = /0\d{9}|hotline|inbox|giảm giá|quảng cáo|liên hệ|dịch vụ uy tín/i.test(content);
     aiAnalysis = {
       isSeeding,
@@ -226,9 +365,10 @@ export async function submitReviewWithAI(
     };
   }
 
-  // 2. Create review object
+  // 2. Create review object & save to Firestore
+  const reviewId = 'rev_' + Date.now();
   const newReview: Review = {
-    reviewId: 'rev_' + Date.now(),
+    reviewId,
     placeId,
     userId: currentUser.uid,
     userName: currentUser.username,
@@ -242,9 +382,7 @@ export async function submitReviewWithAI(
     detectedKeywords: aiAnalysis.detectedKeywords,
   };
 
-  const reviews = getReviews();
-  reviews.unshift(newReview);
-  localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(reviews));
+  await setDoc(doc(db, REVIEWS_COL, reviewId), newReview);
 
   // 3. Handle User Strike Penalties if AI flagged Seeding
   let userStatusUpdated: User | null = null;
@@ -256,7 +394,7 @@ export async function submitReviewWithAI(
       currentUser.isBanned = true;
       currentUser.banUntil = banDate.toISOString();
     }
-    updateUser(currentUser);
+    await updateUser(currentUser);
     userStatusUpdated = currentUser;
   }
 
@@ -267,10 +405,21 @@ export async function submitReviewWithAI(
   };
 }
 
-// Reset store to demo defaults
-export function resetDemoData() {
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
-  localStorage.setItem(STORAGE_KEYS.PLACES, JSON.stringify(INITIAL_PLACES));
-  localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(INITIAL_REVIEWS));
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'guest');
+// Reset store to demo defaults in Firestore
+export async function resetDemoData(): Promise<void> {
+  try {
+    for (const user of INITIAL_USERS) {
+      await setDoc(doc(db, USERS_COL, user.uid), user);
+    }
+    for (const place of INITIAL_PLACES) {
+      await setDoc(doc(db, PLACES_COL, place.placeId), place);
+    }
+    for (const review of INITIAL_REVIEWS) {
+      await setDoc(doc(db, REVIEWS_COL, review.reviewId), review);
+    }
+    currentSessionUserId = 'guest';
+    await signOut(auth);
+  } catch (err) {
+    console.error('Error resetting demo data:', err);
+  }
 }

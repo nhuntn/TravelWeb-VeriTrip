@@ -50,7 +50,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
@@ -61,7 +61,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     try {
-      const user = loginUser(email, password);
+      const user = await loginUser(email, password);
       setSuccessMsg(`Đăng nhập thành công! Chào mừng ${user.username}`);
       setTimeout(() => {
         onLoginSuccess(user);
@@ -72,7 +72,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccessMsg(null);
@@ -83,7 +83,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     try {
-      const user = registerUser({
+      const user = await registerUser({
         username,
         email,
         password,
@@ -99,10 +99,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     setError(null);
     try {
-      const user = loginUser('nhuntn1112@gmail.com', '123456');
+      const user = await loginUser('nhuntn1112@gmail.com', '123456');
       setSuccessMsg('Đăng nhập Google thành công! Tải thông tin tài khoản Google...');
       setTimeout(() => {
         onLoginSuccess(user);

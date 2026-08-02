@@ -204,7 +204,7 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !address) return;
 
@@ -212,7 +212,7 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
     const finalMapsUrl = googleMapsUrl.trim() ||
       `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((name + ' ' + address).trim())}`;
 
-    const newPlace = addPlace({
+    const newPlace = await addPlace({
       name,
       category,
       address,

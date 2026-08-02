@@ -177,7 +177,7 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveError('');
     setSaveSuccess(false);
@@ -207,7 +207,7 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
         password: newPassword.trim() ? newPassword.trim() : user.password,
       };
 
-      updateUser(updated);
+      await updateUser(updated);
       setSaveSuccess(true);
       setNewPassword('');
       setConfirmPassword('');
