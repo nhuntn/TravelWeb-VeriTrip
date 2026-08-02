@@ -1,12 +1,9 @@
 {
-  "projectId": "gen-lang-client-0872240264",
-  "appId": "1:990895975139:web:0474d15953a0f8a0c373d6",
-  "apiKey": "AIzaSyCj8-XbM8RbzQJmurOgbEykmgXN7m1fE18",
-  "authDomain": "gen-lang-client-0872240264.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-remixveritripain-ebb8d346-25f8-4526-8099-399caa86d088",
-  "storageBucket": "gen-lang-client-0872240264.firebasestorage.app",
-  "messagingSenderId": "990895975139",
-  "measurementId": "",
-  "oAuthClientId": "990895975139-4i47vfd2ntcg4rri5kpmnmh3ou40cd44.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "apiKey": "AIzaSyAEi94WrxyJX4btayr1TF2uxTQOnrEyEQ4",
+  "authDomain": "veritrip-7b2e2.firebaseapp.com",
+  "projectId": "veritrip-7b2e2",
+  "storageBucket": "veritrip-7b2e2.firebasestorage.app",
+  "messagingSenderId": "286016293651",
+  "appId": "1:286016293651:web:d6c03ffcfece73c53aa8e6",
+  "measurementId": "G-VK9P3CDLXY"
 }
