@@ -231,8 +231,8 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-800 relative my-auto p-4 md:p-6 space-y-4 animate-in fade-in zoom-in duration-200 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-lg max-h-[88vh] flex flex-col shadow-2xl border border-gray-200 dark:border-gray-800 relative my-auto p-4 md:p-6 space-y-4 animate-in fade-in zoom-in duration-200 overflow-hidden cursor-default" onClick={(e) => e.stopPropagation()}>
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 pb-3 shrink-0">

@@ -5,6 +5,7 @@ import {
   getReviews,
   getCurrentUser,
   setCurrentUserId,
+  logoutUser,
   resetDemoData,
 } from './services/store';
 import { Navbar } from './components/Navbar';
@@ -14,6 +15,7 @@ import { PlaceList } from './components/PlaceList';
 import { PlaceDetailModal } from './components/PlaceDetailModal';
 import { AddPlaceModal } from './components/AddPlaceModal';
 import { UserStatusModal } from './components/UserStatusModal';
+import { AuthModal } from './components/AuthModal';
 import {
   MapPin,
   Sparkles,
@@ -38,6 +40,7 @@ export default function App() {
   // Modals
   const [isAddPlaceOpen, setIsAddPlaceOpen] = useState(false);
   const [isUserStatusOpen, setIsUserStatusOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [pickedMapCoords, setPickedMapCoords] = useState<LocationCoordinates | null>(null);
 
   // User location & city selection
@@ -91,6 +94,15 @@ export default function App() {
     setCurrentUser(getCurrentUser());
   };
 
+  const handleLogout = () => {
+    logoutUser();
+    reloadStoreData();
+  };
+
+  const handleLoginSuccess = (user: User) => {
+    reloadStoreData();
+  };
+
   const handleResetData = () => {
     resetDemoData();
     reloadStoreData();
@@ -100,8 +112,21 @@ export default function App() {
     ? reviews.filter((r) => r.placeId === selectedPlace.placeId)
     : [];
 
-  // Quick handler to add place at current GPS location
+  // Handler to open Add Place modal (requires login)
+  const handleOpenAddPlace = () => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+    } else {
+      setIsAddPlaceOpen(true);
+    }
+  };
+
+  // Quick handler to add place at current GPS location (requires login)
   const handleAddAtCurrentLocation = () => {
+    if (!currentUser) {
+      setIsAuthModalOpen(true);
+      return;
+    }
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -132,40 +157,40 @@ export default function App() {
         viewMode={viewMode}
         onViewChange={setViewMode}
         currentUser={currentUser}
-        onOpenAddPlace={() => setIsAddPlaceOpen(true)}
+        onOpenAddPlace={handleOpenAddPlace}
         onAddAtCurrentLocation={handleAddAtCurrentLocation}
         onOpenUserStatus={() => setIsUserStatusOpen(true)}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+        onLogout={handleLogout}
         onSwitchUser={handleSwitchUser}
         locationName={locationName}
         onRequestLocation={requestBrowserGeolocation}
       />
 
       {/* City Switcher Banner */}
-      <div className="bg-orange-600 dark:bg-orange-950 text-white py-2 px-4 shadow-inner border-b border-orange-500/30">
-        <div className="max-w-7xl mx-auto flex items-center justify-between text-xs flex-wrap gap-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-300 animate-spin" />
-            <span className="font-bold">USP "AI Anti-Seeding":</span>
-            <span className="hidden sm:inline">Phát hiện & cấm review ảo quảng cáo bằng Gemini AI.</span>
+      <div className="bg-orange-600 dark:bg-orange-950 text-white py-0.5 px-3 border-b border-orange-500/30 text-[10px] leading-tight">
+        <div className="max-w-7xl mx-auto flex items-center justify-between flex-nowrap gap-2 overflow-x-auto">
+          <div className="flex items-center gap-1 shrink-0 font-medium">
+            <Sparkles className="w-3 h-3 text-amber-300" />
+            <span className="font-bold">AI Anti-Seeding</span>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto">
-            <span className="font-medium text-orange-200 text-[11px]">Đổi khu vực:</span>
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => setCityLocation('Quảng Ngãi (Bình Sơn)', { lat: 15.3405, lng: 108.9212 })}
-              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition ${
+              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
                 locationName.includes('Quảng Ngãi')
-                  ? 'bg-white text-orange-800 shadow'
+                  ? 'bg-white text-orange-800'
                   : 'bg-orange-700/60 hover:bg-orange-700 text-white'
               }`}
             >
-              📍 Quảng Ngãi (Bình Sơn)
+              📍 Quảng Ngãi
             </button>
             <button
               onClick={() => setCityLocation('Hà Nội', { lat: 21.028511, lng: 105.854167 })}
-              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition ${
+              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
                 locationName === 'Hà Nội'
-                  ? 'bg-white text-orange-800 shadow'
+                  ? 'bg-white text-orange-800'
                   : 'bg-orange-700/60 hover:bg-orange-700 text-white'
               }`}
             >
@@ -173,19 +198,19 @@ export default function App() {
             </button>
             <button
               onClick={() => setCityLocation('TP. Hồ Chí Minh', { lat: 10.77123, lng: 106.69248 })}
-              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition ${
+              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
                 locationName === 'TP. Hồ Chí Minh'
-                  ? 'bg-white text-orange-800 shadow'
+                  ? 'bg-white text-orange-800'
                   : 'bg-orange-700/60 hover:bg-orange-700 text-white'
               }`}
             >
-              TP. Hồ Chí Minh
+              TP.HCM
             </button>
             <button
               onClick={() => setCityLocation('Đà Nẵng', { lat: 16.068, lng: 108.245 })}
-              className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold transition ${
+              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
                 locationName === 'Đà Nẵng'
-                  ? 'bg-white text-orange-800 shadow'
+                  ? 'bg-white text-orange-800'
                   : 'bg-orange-700/60 hover:bg-orange-700 text-white'
               }`}
             >
@@ -222,36 +247,6 @@ export default function App() {
             
             {/* Interactive Map View */}
             <div className="lg:col-span-8 h-[600px] lg:h-[720px] sticky top-20 flex flex-col space-y-2">
-              {/* Engine Switcher Bar */}
-              <div className="flex items-center justify-between bg-white dark:bg-gray-900 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-800 shadow-sm text-xs">
-                <span className="font-bold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                  <Compass className="w-4 h-4 text-orange-500" />
-                  Bản đồ hiển thị:
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setMapEngine('google')}
-                    className={`px-3 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
-                      mapEngine === 'google'
-                        ? 'bg-orange-600 text-white shadow'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                    }`}
-                  >
-                    <span>Google Maps Platform</span>
-                  </button>
-                  <button
-                    onClick={() => setMapEngine('leaflet')}
-                    className={`px-3 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
-                      mapEngine === 'leaflet'
-                        ? 'bg-orange-600 text-white shadow'
-                        : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200'
-                    }`}
-                  >
-                    <span>OpenStreetMap (Leaflet)</span>
-                  </button>
-                </div>
-              </div>
-
               {/* Map Engine Render */}
               <div className="flex-1 w-full h-full min-h-[550px] overflow-hidden rounded-2xl">
                 {mapEngine === 'google' ? (
@@ -350,6 +345,7 @@ export default function App() {
           onClose={() => setSelectedPlace(null)}
           onReviewSubmitted={reloadStoreData}
           onSwitchUser={handleSwitchUser}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
         />
       )}
 
@@ -373,6 +369,20 @@ export default function App() {
           onClose={() => setIsUserStatusOpen(false)}
           onSwitchUser={handleSwitchUser}
           onResetData={handleResetData}
+          onLogout={handleLogout}
+          onOpenAuth={() => setIsAuthModalOpen(true)}
+        />
+      )}
+
+      {/* Auth Modal (Login / Register) */}
+      {isAuthModalOpen && (
+        <AuthModal
+          onClose={() => setIsAuthModalOpen(false)}
+          onLoginSuccess={handleLoginSuccess}
+          onQuickSwitchUser={(uid) => {
+            handleSwitchUser(uid);
+            setIsAuthModalOpen(false);
+          }}
         />
       )}
 

@@ -8,10 +8,9 @@ import {
   ShieldAlert,
   ShieldCheck,
   UserCheck,
+  LogIn,
   LogOut,
   Sparkles,
-  MapPin,
-  Smartphone,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -21,6 +20,8 @@ interface NavbarProps {
   onOpenAddPlace: () => void;
   onAddAtCurrentLocation?: () => void;
   onOpenUserStatus: () => void;
+  onOpenAuth: () => void;
+  onLogout: () => void;
   onSwitchUser: (uid: string) => void;
   locationName: string;
   onRequestLocation: () => void;
@@ -33,6 +34,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAddPlace,
   onAddAtCurrentLocation,
   onOpenUserStatus,
+  onOpenAuth,
+  onLogout,
   onSwitchUser,
   locationName,
   onRequestLocation,
@@ -51,9 +54,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <h1 className="font-bold text-lg text-gray-900 dark:text-white tracking-tight">
                 Travel<span className="text-orange-600 dark:text-orange-400">Web</span>
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300 border border-orange-200 dark:border-orange-800 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" /> Anti-Seeding AI
-              </span>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
               Địa điểm chân thực • Cảnh báo đánh giá ảo
@@ -111,12 +111,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Thêm địa điểm mới</span>
           </button>
 
-          {/* User Profile / Switcher Dropdown */}
+          {/* User Profile & Logout Actions */}
           {currentUser ? (
-            <div className="relative group">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={onOpenUserStatus}
                 className="flex items-center gap-2 p-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition border border-gray-200 dark:border-gray-700"
+                title="Xem trạng thái vi phạm & thông tin tài khoản"
               >
                 <img
                   src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
@@ -140,14 +141,23 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
               </button>
+
+              <button
+                onClick={onLogout}
+                className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/80 transition shadow-sm flex items-center gap-1 text-xs font-bold active:scale-95"
+                title="Đăng xuất tài khoản"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden md:inline">Đăng xuất</span>
+              </button>
             </div>
           ) : (
             <button
-              onClick={() => onSwitchUser('user_demo_1')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 font-semibold text-xs transition hover:opacity-90"
+              onClick={onOpenAuth}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md shadow-orange-600/20 transition active:scale-95"
             >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Đăng nhập Gmail</span>
+              <LogIn className="w-4 h-4" />
+              <span>Đăng nhập / Đăng ký</span>
             </button>
           )}
 

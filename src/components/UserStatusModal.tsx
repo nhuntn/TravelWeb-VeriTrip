@@ -1,13 +1,14 @@
 import React from 'react';
 import { User } from '../types';
-import { X, ShieldAlert, ShieldCheck, AlertOctagon, UserCheck, RefreshCw } from 'lucide-react';
-import { resetDemoData } from '../services/store';
+import { X, ShieldAlert, ShieldCheck, AlertOctagon, UserCheck, RefreshCw, LogOut, LogIn } from 'lucide-react';
 
 interface UserStatusModalProps {
   user: User | null;
   onClose: () => void;
   onSwitchUser: (uid: string) => void;
   onResetData: () => void;
+  onLogout?: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const UserStatusModal: React.FC<UserStatusModalProps> = ({
@@ -15,6 +16,8 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
   onClose,
   onSwitchUser,
   onResetData,
+  onLogout,
+  onOpenAuth,
 }) => {
   if (!user) return null;
 
@@ -22,8 +25,8 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
   const isBanned = user.isBanned || strikes > 5;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-800 p-6 md:p-8 space-y-6 relative animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm cursor-pointer" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-md shadow-2xl border border-gray-200 dark:border-gray-800 p-6 md:p-8 space-y-6 relative animate-in fade-in zoom-in duration-200 cursor-default" onClick={(e) => e.stopPropagation()}>
         
         {/* Close Button */}
         <button
@@ -113,32 +116,33 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
           )}
         </div>
 
-        {/* Demo Switch Account Section */}
-        <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block">
-            Chuyển Đổi Tài Khoản Thử Nghiệm
-          </span>
-          <div className="grid grid-cols-2 gap-2">
+        {/* Account Actions & Logout Button */}
+        <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-2">
+          {onLogout && (
             <button
               onClick={() => {
-                onSwitchUser('user_demo_1');
+                onLogout();
                 onClose();
               }}
-              className="p-2.5 rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 text-xs font-bold hover:bg-emerald-100 transition"
+              className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition shadow flex items-center justify-center gap-2 active:scale-95"
             >
-              An (0 Strike)
+              <LogOut className="w-4 h-4" />
+              <span>Đăng Xuất Khỏi Tài Khoản này</span>
             </button>
+          )}
 
+          {onOpenAuth && (
             <button
               onClick={() => {
-                onSwitchUser('user_seeder_test');
                 onClose();
+                onOpenAuth();
               }}
-              className="p-2.5 rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs font-bold hover:bg-amber-100 transition"
+              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold text-xs transition flex items-center justify-center gap-2"
             >
-              Seeder (4 Strikes)
+              <LogIn className="w-4 h-4 text-orange-500" />
+              <span>Đăng nhập tài khoản khác / Đăng ký</span>
             </button>
-          </div>
+          )}
         </div>
 
         {/* Reset Store Option */}
@@ -151,7 +155,7 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
             className="text-xs text-gray-400 hover:text-rose-600 flex items-center gap-1 transition"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Reset Dữ Liệu Demo ban đầu</span>
+            <span>Reset Dữ Liệu Demo</span>
           </button>
 
           <button

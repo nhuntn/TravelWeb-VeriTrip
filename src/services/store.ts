@@ -55,6 +55,74 @@ export function setCurrentUserId(uid: string) {
   localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, uid);
 }
 
+export function logoutUser() {
+  initStore();
+  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'guest');
+}
+
+export function loginUser(email: string, password?: string): User {
+  initStore();
+  const users = getUsers();
+  const normalizedEmail = email.trim().toLowerCase();
+  let user = users.find((u) => u.email.toLowerCase() === normalizedEmail);
+
+  if (user) {
+    if (password && user.password && user.password !== password) {
+      throw new Error('Mật khẩu không chính xác.');
+    }
+  } else {
+    // If user does not exist yet, auto-create a user profile for smooth login
+    const username = email.split('@')[0];
+    user = {
+      uid: 'user_' + Date.now(),
+      email: email.trim(),
+      username: username.charAt(0).toUpperCase() + username.slice(1),
+      password: password || '123456',
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
+      strikes: 0,
+      isBanned: false,
+      banUntil: null,
+      role: 'user',
+    };
+    users.push(user);
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  }
+
+  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, user.uid);
+  return user;
+}
+
+export function registerUser(data: { username: string; email: string; password?: string; avatar?: string }): User {
+  initStore();
+  const users = getUsers();
+  const normalizedEmail = data.email.trim().toLowerCase();
+
+  const existing = users.find((u) => u.email.toLowerCase() === normalizedEmail);
+  if (existing) {
+    throw new Error('Email này đã được đăng ký. Vui lòng sử dụng tính năng Đăng nhập.');
+  }
+
+  const newUser: User = {
+    uid: 'user_' + Date.now(),
+    email: data.email.trim(),
+    username: data.username.trim(),
+    password: data.password || '123456',
+    avatar:
+      data.avatar ||
+      `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
+    strikes: 0,
+    isBanned: false,
+    banUntil: null,
+    role: 'user',
+  };
+
+  users.push(newUser);
+  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, newUser.uid);
+
+  return newUser;
+}
+
 export function updateUser(updatedUser: User) {
   const users = getUsers();
   const index = users.findIndex((u) => u.uid === updatedUser.uid);

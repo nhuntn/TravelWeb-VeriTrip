@@ -28,6 +28,7 @@ interface PlaceDetailModalProps {
   onClose: () => void;
   onReviewSubmitted: () => void;
   onSwitchUser: (uid: string) => void;
+  onOpenAuth?: () => void;
 }
 
 export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
@@ -37,6 +38,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   onClose,
   onReviewSubmitted,
   onSwitchUser,
+  onOpenAuth,
 }) => {
   // Review form state
   const [rating, setRating] = useState(5);
@@ -95,8 +97,8 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   const averageRatingDisplay = avgRatingValue !== null ? `${avgRatingValue} / 5.0` : '?';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 dark:border-gray-800 relative my-8 animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto cursor-pointer" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 dark:border-gray-800 relative my-8 animate-in fade-in zoom-in duration-200 cursor-default" onClick={(e) => e.stopPropagation()}>
         
         {/* Close Button */}
         <button
@@ -360,13 +362,16 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
             </div>
 
             {!currentUser ? (
-              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between">
-                <span>Bạn cần đăng nhập bằng Gmail để viết đánh giá cho địa điểm này.</span>
+              <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-2">
+                <span>Bạn cần đăng nhập để gửi đánh giá cho địa điểm này.</span>
                 <button
-                  onClick={() => onSwitchUser('user_demo_1')}
-                  className="px-3 py-1.5 bg-orange-600 text-white font-bold rounded-xl text-xs hover:bg-orange-700 transition"
+                  onClick={() => {
+                    if (onOpenAuth) onOpenAuth();
+                    else onSwitchUser('user_demo_1');
+                  }}
+                  className="px-3 py-1.5 bg-orange-600 text-white font-bold rounded-xl text-xs hover:bg-orange-700 transition shrink-0"
                 >
-                  Đăng nhập ngay
+                  Đăng nhập / Đăng ký
                 </button>
               </div>
             ) : currentUser.isBanned ? (
