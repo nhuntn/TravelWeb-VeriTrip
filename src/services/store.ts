@@ -15,27 +15,105 @@ import {
 } from 'firebase/firestore';
 import { INITIAL_PLACES, INITIAL_REVIEWS, INITIAL_USERS } from '../data/initialData';
 import { AIAnalysisResult, Place, Review, User } from '../types';
+import firebaseConfigData from '../../firebase-applet-config.json';
 
 // 1. Initialize Firebase App using Environment Variables
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'travelweb-demo.firebaseapp.com',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'travelweb-demo',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'travelweb-demo.appspot.com',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef123456',
+  apiKey: firebaseConfigData.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
+  authDomain: firebaseConfigData.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'travelweb-demo.firebaseapp.com',
+  projectId: firebaseConfigData.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || 'travelweb-demo',
+  storageBucket: firebaseConfigData.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'travelweb-demo.appspot.com',
+  messagingSenderId: firebaseConfigData.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
+  appId: firebaseConfigData.appId || import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef123456',
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// 2. Collections Setup
+// 2. Collections Setup & LocalStorage Fallback Keys
 const USERS_COL = 'users';
 const PLACES_COL = 'places';
 const REVIEWS_COL = 'reviews';
 
-let currentSessionUserId: string | null = 'guest';
+const LOCAL_USERS_KEY = 'travelweb_users_local_v2';
+const LOCAL_PLACES_KEY = 'travelweb_places_local_v2';
+const LOCAL_REVIEWS_KEY = 'travelweb_reviews_local_v2';
+const SESSION_USER_KEY = 'travelweb_current_user_id_v2';
+
+function getLocalUsers(): User[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_USERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(INITIAL_USERS));
+  return INITIAL_USERS;
+}
+
+function saveLocalUsers(users: User[]): void {
+  try {
+    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function getLocalPlaces(): Place[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_PLACES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  localStorage.setItem(LOCAL_PLACES_KEY, JSON.stringify(INITIAL_PLACES));
+  return INITIAL_PLACES;
+}
+
+function saveLocalPlaces(places: Place[]): void {
+  try {
+    localStorage.setItem(LOCAL_PLACES_KEY, JSON.stringify(places));
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function getLocalReviews(): Review[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_REVIEWS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+  localStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(INITIAL_REVIEWS));
+  return INITIAL_REVIEWS;
+}
+
+function saveLocalReviews(reviews: Review[]): void {
+  try {
+    localStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(reviews));
+  } catch (e) {
+    /* ignore */
+  }
+}
+
+function getSessionUserId(): string {
+  return localStorage.getItem(SESSION_USER_KEY) || 'guest';
+}
+
+function setSessionUserId(uid: string): void {
+  localStorage.setItem(SESSION_USER_KEY, uid);
+}
 
 // Helper to auto-seed initial data to Firestore if collection is empty
 export async function seedInitialDataIfEmpty(): Promise<void> {
@@ -73,18 +151,25 @@ export async function getUsers(): Promise<User[]> {
     if (snap.empty) {
       await seedInitialDataIfEmpty();
       const retrySnap = await getDocs(collection(db, USERS_COL));
-      return retrySnap.docs.map((docSnap) => docSnap.data() as User);
+      if (retrySnap.empty) {
+        return getLocalUsers();
+      }
+      const users = retrySnap.docs.map((docSnap) => docSnap.data() as User);
+      saveLocalUsers(users);
+      return users;
     }
-    return snap.docs.map((docSnap) => docSnap.data() as User);
+    const users = snap.docs.map((docSnap) => docSnap.data() as User);
+    saveLocalUsers(users);
+    return users;
   } catch (error) {
-    console.error('Error fetching users from Firestore:', error);
-    return INITIAL_USERS;
+    console.warn('Using local fallback for getUsers:', error);
+    return getLocalUsers();
   }
 }
 
 export async function getCurrentUser(): Promise<User | null> {
   const firebaseUser = auth.currentUser;
-  const targetUid = firebaseUser ? firebaseUser.uid : currentSessionUserId;
+  const targetUid = firebaseUser ? firebaseUser.uid : getSessionUserId();
 
   if (!targetUid || targetUid === 'guest') return null;
 
@@ -110,21 +195,22 @@ export async function getCurrentUser(): Promise<User | null> {
 
     return user;
   } catch (error) {
-    console.error('Error getting current user:', error);
-    return null;
+    console.warn('Error fetching current user from Firestore, checking local storage:', error);
+    const localUsers = getLocalUsers();
+    return localUsers.find((u) => u.uid === targetUid) || null;
   }
 }
 
 export async function setCurrentUserId(uid: string): Promise<void> {
-  currentSessionUserId = uid;
+  setSessionUserId(uid);
 }
 
 export async function logoutUser(): Promise<void> {
-  currentSessionUserId = 'guest';
+  setSessionUserId('guest');
   try {
     await signOut(auth);
   } catch (err) {
-    console.error('Error during logout:', err);
+    console.warn('Error during Firebase logout:', err);
   }
 }
 
@@ -154,6 +240,10 @@ export async function loginUser(email: string, password?: string): Promise<User>
     if (password && user.password && user.password !== password) {
       throw new Error('Mật khẩu không chính xác.');
     }
+    if (!user.password && password) {
+      user.password = password;
+      await updateUser(user);
+    }
   } else {
     const username = email.split('@')[0];
     const uid = authUid || 'user_' + Date.now();
@@ -168,10 +258,10 @@ export async function loginUser(email: string, password?: string): Promise<User>
       banUntil: null,
       role: 'user',
     };
-    await setDoc(doc(db, USERS_COL, user.uid), user);
+    await updateUser(user);
   }
 
-  currentSessionUserId = user.uid;
+  setSessionUserId(user.uid);
   return user;
 }
 
@@ -213,16 +303,26 @@ export async function registerUser(data: {
     role: 'user',
   };
 
-  await setDoc(doc(db, USERS_COL, newUser.uid), newUser);
-  currentSessionUserId = newUser.uid;
+  await updateUser(newUser);
+  setSessionUserId(newUser.uid);
   return newUser;
 }
 
 export async function updateUser(updatedUser: User): Promise<void> {
+  // Always update local storage cache first
+  const localUsers = getLocalUsers();
+  const idx = localUsers.findIndex((u) => u.uid === updatedUser.uid);
+  if (idx !== -1) {
+    localUsers[idx] = updatedUser;
+  } else {
+    localUsers.push(updatedUser);
+  }
+  saveLocalUsers(localUsers);
+
   try {
     await setDoc(doc(db, USERS_COL, updatedUser.uid), updatedUser, { merge: true });
   } catch (error) {
-    console.error('Error updating user in Firestore:', error);
+    console.warn('Notice: Firestore user update fallback used:', error);
   }
 }
 
@@ -231,47 +331,52 @@ export async function updateUser(updatedUser: User): Promise<void> {
 // -------------------------------------------------------------
 
 export async function getPlaces(): Promise<Place[]> {
+  let places: Place[] = [];
   try {
     const placesSnap = await getDocs(collection(db, PLACES_COL));
-    let places: Place[] = [];
-
     if (placesSnap.empty) {
       await seedInitialDataIfEmpty();
       const retrySnap = await getDocs(collection(db, PLACES_COL));
-      places = retrySnap.docs.map((docSnap) => docSnap.data() as Place);
+      if (retrySnap.empty) {
+        places = getLocalPlaces();
+      } else {
+        places = retrySnap.docs.map((docSnap) => docSnap.data() as Place);
+        saveLocalPlaces(places);
+      }
     } else {
       places = placesSnap.docs.map((docSnap) => docSnap.data() as Place);
+      saveLocalPlaces(places);
     }
-
-    const reviews = await getReviews();
-
-    // Re-calculate trust score & average rating dynamically
-    return places.map((place) => {
-      const placeReviews = reviews.filter((r) => r.placeId === place.placeId);
-      if (placeReviews.length === 0) return place;
-
-      const cleanReviews = placeReviews.filter((r) => !r.isSeeding);
-      const avgRating =
-        cleanReviews.length > 0
-          ? Number((cleanReviews.reduce((sum, r) => sum + r.rating, 0) / cleanReviews.length).toFixed(1))
-          : place.averageRating;
-
-      const trustScore = Math.max(
-        0,
-        Math.round(((placeReviews.length - (placeReviews.length - cleanReviews.length)) / placeReviews.length) * 100)
-      );
-
-      return {
-        ...place,
-        reviewCount: placeReviews.length,
-        averageRating: avgRating,
-        trustScore,
-      };
-    });
   } catch (error) {
-    console.error('Error fetching places from Firestore:', error);
-    return INITIAL_PLACES;
+    console.warn('Using local fallback for getPlaces:', error);
+    places = getLocalPlaces();
   }
+
+  const reviews = await getReviews();
+
+  // Re-calculate trust score & average rating dynamically
+  return places.map((place) => {
+    const placeReviews = reviews.filter((r) => r.placeId === place.placeId);
+    if (placeReviews.length === 0) return place;
+
+    const cleanReviews = placeReviews.filter((r) => !r.isSeeding);
+    const avgRating =
+      cleanReviews.length > 0
+        ? Number((cleanReviews.reduce((sum, r) => sum + r.rating, 0) / cleanReviews.length).toFixed(1))
+        : place.averageRating;
+
+    const trustScore = Math.max(
+      0,
+      Math.round(((placeReviews.length - (placeReviews.length - cleanReviews.length)) / placeReviews.length) * 100)
+    );
+
+    return {
+      ...place,
+      reviewCount: placeReviews.length,
+      averageRating: avgRating,
+      trustScore,
+    };
+  });
 }
 
 export async function addPlace(
@@ -287,7 +392,16 @@ export async function addPlace(
     trustScore: 100,
   };
 
-  await setDoc(doc(db, PLACES_COL, placeId), newPlace);
+  const localPlaces = getLocalPlaces();
+  localPlaces.unshift(newPlace);
+  saveLocalPlaces(localPlaces);
+
+  try {
+    await setDoc(doc(db, PLACES_COL, placeId), newPlace);
+  } catch (err) {
+    console.warn('Notice: Firestore addPlace fallback used:', err);
+  }
+
   return newPlace;
 }
 
@@ -296,29 +410,33 @@ export async function addPlace(
 // -------------------------------------------------------------
 
 export async function getReviews(placeId?: string): Promise<Review[]> {
+  let reviews: Review[] = [];
   try {
     const reviewsSnap = await getDocs(collection(db, REVIEWS_COL));
-    let reviews: Review[] = [];
-
     if (reviewsSnap.empty) {
       await seedInitialDataIfEmpty();
       const retrySnap = await getDocs(collection(db, REVIEWS_COL));
-      reviews = retrySnap.docs.map((docSnap) => docSnap.data() as Review);
+      if (retrySnap.empty) {
+        reviews = getLocalReviews();
+      } else {
+        reviews = retrySnap.docs.map((docSnap) => docSnap.data() as Review);
+        saveLocalReviews(reviews);
+      }
     } else {
       reviews = reviewsSnap.docs.map((docSnap) => docSnap.data() as Review);
+      saveLocalReviews(reviews);
     }
-
-    // Sort descending by creation date
-    reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    if (placeId) {
-      return reviews.filter((r) => r.placeId === placeId);
-    }
-    return reviews;
   } catch (error) {
-    console.error('Error fetching reviews from Firestore:', error);
-    return INITIAL_REVIEWS;
+    console.warn('Using local fallback for getReviews:', error);
+    reviews = getLocalReviews();
   }
+
+  reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  if (placeId) {
+    return reviews.filter((r) => r.placeId === placeId);
+  }
+  return reviews;
 }
 
 // Core AI Anti-Seeding Review submission logic
@@ -365,7 +483,7 @@ export async function submitReviewWithAI(
     };
   }
 
-  // 2. Create review object & save to Firestore
+  // 2. Create review object & save to local / Firestore
   const reviewId = 'rev_' + Date.now();
   const newReview: Review = {
     reviewId,
@@ -382,7 +500,15 @@ export async function submitReviewWithAI(
     detectedKeywords: aiAnalysis.detectedKeywords,
   };
 
-  await setDoc(doc(db, REVIEWS_COL, reviewId), newReview);
+  const localReviews = getLocalReviews();
+  localReviews.unshift(newReview);
+  saveLocalReviews(localReviews);
+
+  try {
+    await setDoc(doc(db, REVIEWS_COL, reviewId), newReview);
+  } catch (err) {
+    console.warn('Notice: Firestore submitReview fallback used:', err);
+  }
 
   // 3. Handle User Strike Penalties if AI flagged Seeding
   let userStatusUpdated: User | null = null;
@@ -405,8 +531,13 @@ export async function submitReviewWithAI(
   };
 }
 
-// Reset store to demo defaults in Firestore
+// Reset store to demo defaults
 export async function resetDemoData(): Promise<void> {
+  saveLocalUsers(INITIAL_USERS);
+  saveLocalPlaces(INITIAL_PLACES);
+  saveLocalReviews(INITIAL_REVIEWS);
+  setSessionUserId('guest');
+
   try {
     for (const user of INITIAL_USERS) {
       await setDoc(doc(db, USERS_COL, user.uid), user);
@@ -417,9 +548,8 @@ export async function resetDemoData(): Promise<void> {
     for (const review of INITIAL_REVIEWS) {
       await setDoc(doc(db, REVIEWS_COL, review.reviewId), review);
     }
-    currentSessionUserId = 'guest';
     await signOut(auth);
   } catch (err) {
-    console.error('Error resetting demo data:', err);
+    console.warn('Notice: Firestore reset fallback used:', err);
   }
 }

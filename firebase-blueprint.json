@@ -1,0 +1,60 @@
+{
+  "collections": [
+    {
+      "name": "users",
+      "fields": [
+        { "name": "uid", "type": "string" },
+        { "name": "email", "type": "string" },
+        { "name": "username", "type": "string" },
+        { "name": "avatar", "type": "string" },
+        { "name": "strikes", "type": "number" },
+        { "name": "isBanned", "type": "boolean" },
+        { "name": "banUntil", "type": "string", "optional": true },
+        { "name": "role", "type": "string" }
+      ],
+      "rules": {
+        "read": "true",
+        "write": "request.auth != null && request.auth.uid == resource.data.uid"
+      }
+    },
+    {
+      "name": "places",
+      "fields": [
+        { "name": "placeId", "type": "string" },
+        { "name": "name", "type": "string" },
+        { "name": "category", "type": "string" },
+        { "name": "address", "type": "string" },
+        { "name": "image", "type": "string" },
+        { "name": "averageRating", "type": "number" },
+        { "name": "reviewCount", "type": "number" },
+        { "name": "createdAt", "type": "string" },
+        { "name": "trustScore", "type": "number" }
+      ],
+      "rules": {
+        "read": "true",
+        "write": "request.auth != null"
+      }
+    },
+    {
+      "name": "reviews",
+      "fields": [
+        { "name": "reviewId", "type": "string" },
+        { "name": "placeId", "type": "string" },
+        { "name": "userId", "type": "string" },
+        { "name": "userName", "type": "string" },
+        { "name": "userAvatar", "type": "string" },
+        { "name": "rating", "type": "number" },
+        { "name": "content", "type": "string" },
+        { "name": "createdAt", "type": "string" },
+        { "name": "isSeeding", "type": "boolean" },
+        { "name": "seedingReason", "type": "string" },
+        { "name": "confidenceScore", "type": "number" },
+        { "name": "detectedKeywords", "type": "string[]" }
+      ],
+      "rules": {
+        "read": "true",
+        "write": "request.auth != null"
+      }
+    }
+  ]
+}
