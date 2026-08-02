@@ -5,7 +5,7 @@ const STORAGE_KEYS = {
   USERS: 'travelweb_users_v1',
   PLACES: 'travelweb_places_v1',
   REVIEWS: 'travelweb_reviews_v1',
-  CURRENT_USER_ID: 'travelweb_current_user_id_v1',
+  CURRENT_USER_ID: 'travelweb_current_user_id_v2',
 };
 
 // Initialize localStorage if empty
@@ -20,7 +20,7 @@ export function initStore() {
     localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(INITIAL_REVIEWS));
   }
   if (!localStorage.getItem(STORAGE_KEYS.CURRENT_USER_ID)) {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'user_demo_1'); // Default active user
+    localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'guest'); // Default logged out (guest)
   }
 }
 
@@ -272,5 +272,5 @@ export function resetDemoData() {
   localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
   localStorage.setItem(STORAGE_KEYS.PLACES, JSON.stringify(INITIAL_PLACES));
   localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(INITIAL_REVIEWS));
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'user_demo_1');
+  localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, 'guest');
 }
