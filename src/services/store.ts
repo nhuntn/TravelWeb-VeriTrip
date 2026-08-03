@@ -1,224 +1,119 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-} from 'firebase/auth';
-import {
-  getFirestore,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-} from 'firebase/firestore';
+import { supabase } from './supabaseClient';
 import { INITIAL_PLACES, INITIAL_REVIEWS, INITIAL_USERS } from '../data/initialData';
 import { AIAnalysisResult, Place, Review, User } from '../types';
-import firebaseConfigData from '../../firebase-applet-config.json';
 
-// 1. Initialize Firebase App using Environment Variables
-const firebaseConfig = {
-  apiKey: firebaseConfigData.apiKey || import.meta.env.VITE_FIREBASE_API_KEY || 'demo-api-key',
-  authDomain: firebaseConfigData.authDomain || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'travelweb-demo.firebaseapp.com',
-  projectId: firebaseConfigData.projectId || import.meta.env.VITE_FIREBASE_PROJECT_ID || 'travelweb-demo',
-  storageBucket: firebaseConfigData.storageBucket || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'travelweb-demo.appspot.com',
-  messagingSenderId: firebaseConfigData.messagingSenderId || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '123456789012',
-  appId: firebaseConfigData.appId || import.meta.env.VITE_FIREBASE_APP_ID || '1:123456789012:web:abcdef123456',
-};
+// Fallback initial data in memory if Supabase returns empty / disconnected
+let memoryUsers: User[] = [...INITIAL_USERS];
+let memoryPlaces: Place[] = [...INITIAL_PLACES];
+let memoryReviews: Review[] = [...INITIAL_REVIEWS];
+let currentSessionUserId: string | null = null;
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-
-// 2. Collections Setup & LocalStorage Fallback Keys
-const USERS_COL = 'users';
-const PLACES_COL = 'places';
-const REVIEWS_COL = 'reviews';
-
-const LOCAL_USERS_KEY = 'travelweb_users_local_v2';
-const LOCAL_PLACES_KEY = 'travelweb_places_local_v2';
-const LOCAL_REVIEWS_KEY = 'travelweb_reviews_local_v2';
-const SESSION_USER_KEY = 'travelweb_current_user_id_v2';
-
-function getLocalUsers(): User[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_USERS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    /* ignore */
-  }
-  localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(INITIAL_USERS));
-  return INITIAL_USERS;
+// Helper mapping functions between Supabase DB rows and App Interfaces
+function mapRowToUser(row: any): User {
+  return {
+    uid: row.id || row.uid,
+    email: row.email,
+    username: row.username || row.email?.split('@')[0] || 'User',
+    avatar: row.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(row.email || 'user')}`,
+    strikes: row.strikes ?? 0,
+    isBanned: row.is_banned ?? row.isBanned ?? false,
+    banUntil: row.ban_until || row.banUntil || null,
+    role: row.role || 'user',
+  };
 }
 
-function saveLocalUsers(users: User[]): void {
-  try {
-    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
-  } catch (e) {
-    /* ignore */
-  }
+function mapRowToPlace(row: any): Place {
+  return {
+    placeId: row.id || row.placeId,
+    name: row.name,
+    category: row.category,
+    address: row.address,
+    image: row.image,
+    location: typeof row.location === 'string' ? JSON.parse(row.location) : row.location,
+    averageRating: Number(row.average_rating ?? row.averageRating ?? 5.0),
+    reviewCount: Number(row.review_count ?? row.reviewCount ?? 0),
+    trustScore: Number(row.trust_score ?? row.trustScore ?? 100),
+    addedBy: row.added_by || row.addedBy,
+    googleMapsUrl: row.google_maps_url || row.googleMapsUrl,
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+  };
 }
 
-function getLocalPlaces(): Place[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_PLACES_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    /* ignore */
-  }
-  localStorage.setItem(LOCAL_PLACES_KEY, JSON.stringify(INITIAL_PLACES));
-  return INITIAL_PLACES;
-}
-
-function saveLocalPlaces(places: Place[]): void {
-  try {
-    localStorage.setItem(LOCAL_PLACES_KEY, JSON.stringify(places));
-  } catch (e) {
-    /* ignore */
-  }
-}
-
-function getLocalReviews(): Review[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_REVIEWS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-    }
-  } catch (e) {
-    /* ignore */
-  }
-  localStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(INITIAL_REVIEWS));
-  return INITIAL_REVIEWS;
-}
-
-function saveLocalReviews(reviews: Review[]): void {
-  try {
-    localStorage.setItem(LOCAL_REVIEWS_KEY, JSON.stringify(reviews));
-  } catch (e) {
-    /* ignore */
-  }
-}
-
-function getSessionUserId(): string {
-  return localStorage.getItem(SESSION_USER_KEY) || 'guest';
-}
-
-function setSessionUserId(uid: string): void {
-  localStorage.setItem(SESSION_USER_KEY, uid);
-}
-
-// Helper to auto-seed initial data to Firestore if collection is empty
-export async function seedInitialDataIfEmpty(): Promise<void> {
-  try {
-    const placesSnap = await getDocs(collection(db, PLACES_COL));
-    if (placesSnap.empty) {
-      for (const place of INITIAL_PLACES) {
-        await setDoc(doc(db, PLACES_COL, place.placeId), place);
-      }
-    }
-    const usersSnap = await getDocs(collection(db, USERS_COL));
-    if (usersSnap.empty) {
-      for (const user of INITIAL_USERS) {
-        await setDoc(doc(db, USERS_COL, user.uid), user);
-      }
-    }
-    const reviewsSnap = await getDocs(collection(db, REVIEWS_COL));
-    if (reviewsSnap.empty) {
-      for (const review of INITIAL_REVIEWS) {
-        await setDoc(doc(db, REVIEWS_COL, review.reviewId), review);
-      }
-    }
-  } catch (err) {
-    console.warn('Firebase initial seed notice:', err);
-  }
+function mapRowToReview(row: any): Review {
+  return {
+    reviewId: row.id || row.reviewId,
+    placeId: row.place_id || row.placeId,
+    userId: row.user_id || row.userId,
+    userName: row.user_name || row.userName,
+    userAvatar: row.user_avatar || row.userAvatar,
+    rating: Number(row.rating),
+    content: row.content,
+    createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+    isSeeding: row.is_seeding ?? row.isSeeding ?? false,
+    seedingReason: row.seeding_reason || row.seedingReason || '',
+    confidenceScore: Number(row.confidence_score ?? row.confidenceScore ?? 100),
+    detectedKeywords: row.detected_keywords || row.detectedKeywords || [],
+  };
 }
 
 // -------------------------------------------------------------
-// USER METHODS
+// USER / AUTH METHODS (SUPABASE)
 // -------------------------------------------------------------
 
 export async function getUsers(): Promise<User[]> {
-  let users: User[] = [];
   try {
-    const snap = await getDocs(collection(db, USERS_COL));
-    if (snap.empty) {
-      await seedInitialDataIfEmpty();
-      const retrySnap = await getDocs(collection(db, USERS_COL));
-      if (retrySnap.empty) {
-        users = getLocalUsers();
-      } else {
-        users = retrySnap.docs.map((docSnap) => docSnap.data() as User);
-      }
-    } else {
-      users = snap.docs.map((docSnap) => docSnap.data() as User);
+    const { data, error } = await supabase.from('users').select('*');
+    if (!error && data && data.length > 0) {
+      return data.map(mapRowToUser);
     }
-  } catch (error) {
-    console.warn('Using local fallback for getUsers:', error);
+  } catch (err) {
+    console.warn('Error fetching users from Supabase:', err);
   }
-  const localUsers = getLocalUsers();
-  const firestoreUids = new Set(users.map((u) => u.uid));
-  const missingLocal = localUsers.filter((u) => !firestoreUids.has(u.uid));
-  const merged = [...users, ...missingLocal];
-  saveLocalUsers(merged);
-  return merged;
+  return memoryUsers;
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  const firebaseUser = auth.currentUser;
-  const targetUid = firebaseUser ? firebaseUser.uid : getSessionUserId();
-
-  if (!targetUid || targetUid === 'guest') return null;
-
   try {
-    const userDocRef = doc(db, USERS_COL, targetUid);
-    const userDoc = await getDoc(userDocRef);
+    const { data: { session } } = await supabase.auth.getSession();
+    const activeUid = session?.user?.id || currentSessionUserId;
 
-    let user: User | null = null;
-    if (userDoc.exists()) {
-      user = userDoc.data() as User;
-    } else {
-      const users = await getUsers();
-      user = users.find((u) => u.uid === targetUid) || null;
-      if (!user) {
-        const localUsers = getLocalUsers();
-        user = localUsers.find((u) => u.uid === targetUid) || null;
+    if (!activeUid) return null;
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', activeUid)
+      .maybeSingle();
+
+    if (!error && data) {
+      const user = mapRowToUser(data);
+      if (user.strikes > 5 && !user.isBanned) {
+        const banDate = new Date();
+        banDate.setDate(banDate.getDate() + 180);
+        user.isBanned = true;
+        user.banUntil = banDate.toISOString();
+        await updateUser(user);
       }
+      return user;
     }
-
-    if (user && user.strikes > 5 && !user.isBanned) {
-      const banDate = new Date();
-      banDate.setDate(banDate.getDate() + 180); // 6 months ban
-      user.isBanned = true;
-      user.banUntil = banDate.toISOString();
-      await updateUser(user);
-    }
-
-    return user;
-  } catch (error) {
-    console.warn('Error fetching current user from Firestore, checking local storage:', error);
-    const localUsers = getLocalUsers();
-    return localUsers.find((u) => u.uid === targetUid) || null;
+  } catch (err) {
+    console.warn('Supabase getCurrentUser notice:', err);
   }
+
+  if (!currentSessionUserId) return null;
+  return memoryUsers.find((u) => u.uid === currentSessionUserId) || null;
 }
 
 export async function setCurrentUserId(uid: string): Promise<void> {
-  setSessionUserId(uid);
+  currentSessionUserId = uid;
 }
 
 export async function logoutUser(): Promise<void> {
-  setSessionUserId('guest');
+  currentSessionUserId = null;
   try {
-    await signOut(auth);
+    await supabase.auth.signOut();
   } catch (err) {
-    console.warn('Error during Firebase logout:', err);
+    console.warn('Supabase signOut notice:', err);
   }
 }
 
@@ -226,44 +121,44 @@ export async function loginUser(email: string, password?: string): Promise<User>
   const normalizedEmail = email.trim().toLowerCase();
   const pwd = password || '123456';
 
-  let authUid: string | null = null;
+  let supabaseAuthUser: any = null;
+
   try {
-    const userCredential = await signInWithEmailAndPassword(auth, normalizedEmail, pwd);
-    authUid = userCredential.user.uid;
-  } catch (authErr: any) {
-    if (authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-credential') {
-      try {
-        const newUserCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
-        authUid = newUserCredential.user.uid;
-      } catch {
-        // Fallback if email already exists in auth or auth is disabled
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password: pwd,
+    });
+
+    if (error) {
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password: pwd,
+        options: {
+          data: {
+            username: normalizedEmail.split('@')[0],
+          },
+        },
+      });
+      if (!signUpError && signUpData.user) {
+        supabaseAuthUser = signUpData.user;
       }
+    } else {
+      supabaseAuthUser = data.user;
     }
+  } catch (err) {
+    console.warn('Supabase auth sign-in notice:', err);
   }
 
   const users = await getUsers();
   let user = users.find((u) => u.email.toLowerCase() === normalizedEmail);
-  if (!user) {
-    const localUsers = getLocalUsers();
-    user = localUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
-  }
 
-  if (user) {
-    if (password && user.password && user.password !== password) {
-      throw new Error('Mật khẩu không chính xác.');
-    }
-    if (!user.password && password) {
-      user.password = password;
-      await updateUser(user);
-    }
-  } else {
-    const username = email.split('@')[0];
-    const uid = authUid || 'user_' + Date.now();
+  if (!user) {
+    const uid = supabaseAuthUser?.id || 'user_' + Date.now();
+    const username = normalizedEmail.split('@')[0];
     user = {
       uid,
-      email: email.trim(),
+      email: normalizedEmail,
       username: username.charAt(0).toUpperCase() + username.slice(1),
-      password: pwd,
       avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
       strikes: 0,
       isBanned: false,
@@ -273,7 +168,7 @@ export async function loginUser(email: string, password?: string): Promise<User>
     await updateUser(user);
   }
 
-  setSessionUserId(user.uid);
+  currentSessionUserId = user.uid;
   return user;
 }
 
@@ -289,23 +184,33 @@ export async function registerUser(data: {
   const users = await getUsers();
   const existing = users.find((u) => u.email.toLowerCase() === normalizedEmail);
   if (existing) {
-    throw new Error('Email này đã được đăng ký. Vui lòng sử dụng tính năng Đăng nhập.');
+    throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
   }
 
-  let authUid: string | null = null;
+  let uid = 'user_' + Date.now();
   try {
-    const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, pwd);
-    authUid = userCredential.user.uid;
+    const { data: authData, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password: pwd,
+      options: {
+        data: {
+          username: data.username.trim(),
+          avatar: data.avatar,
+        },
+      },
+    });
+
+    if (!error && authData.user) {
+      uid = authData.user.id;
+    }
   } catch (err) {
-    console.warn('Firebase Auth registration notice:', err);
+    console.warn('Supabase auth signUp notice:', err);
   }
 
-  const uid = authUid || 'user_' + Date.now();
   const newUser: User = {
     uid,
-    email: data.email.trim(),
+    email: normalizedEmail,
     username: data.username.trim(),
-    password: pwd,
     avatar:
       data.avatar ||
       `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
@@ -316,59 +221,55 @@ export async function registerUser(data: {
   };
 
   await updateUser(newUser);
-  setSessionUserId(newUser.uid);
+  currentSessionUserId = newUser.uid;
   return newUser;
 }
 
 export async function updateUser(updatedUser: User): Promise<void> {
-  // Always update local storage cache first
-  const localUsers = getLocalUsers();
-  const idx = localUsers.findIndex((u) => u.uid === updatedUser.uid);
+  const idx = memoryUsers.findIndex((u) => u.uid === updatedUser.uid);
   if (idx !== -1) {
-    localUsers[idx] = updatedUser;
+    memoryUsers[idx] = updatedUser;
   } else {
-    localUsers.push(updatedUser);
+    memoryUsers.push(updatedUser);
   }
-  saveLocalUsers(localUsers);
 
   try {
-    await setDoc(doc(db, USERS_COL, updatedUser.uid), updatedUser, { merge: true });
-  } catch (error) {
-    console.warn('Notice: Firestore user update fallback used:', error);
+    await supabase.from('users').upsert({
+      id: updatedUser.uid,
+      email: updatedUser.email,
+      username: updatedUser.username,
+      avatar: updatedUser.avatar,
+      strikes: updatedUser.strikes,
+      is_banned: updatedUser.isBanned,
+      ban_until: updatedUser.banUntil,
+      role: updatedUser.role,
+    });
+  } catch (err) {
+    console.warn('Supabase updateUser error:', err);
   }
 }
 
 // -------------------------------------------------------------
-// PLACES METHODS
+// PLACES METHODS (SUPABASE)
 // -------------------------------------------------------------
 
 export async function getPlaces(): Promise<Place[]> {
   let places: Place[] = [];
+
   try {
-    const placesSnap = await getDocs(collection(db, PLACES_COL));
-    if (placesSnap.empty) {
-      await seedInitialDataIfEmpty();
-      const retrySnap = await getDocs(collection(db, PLACES_COL));
-      if (retrySnap.empty) {
-        places = getLocalPlaces();
-      } else {
-        places = retrySnap.docs.map((docSnap) => docSnap.data() as Place);
-      }
+    const { data, error } = await supabase.from('places').select('*');
+    if (!error && data && data.length > 0) {
+      places = data.map(mapRowToPlace);
     } else {
-      places = placesSnap.docs.map((docSnap) => docSnap.data() as Place);
+      places = memoryPlaces;
     }
-  } catch (error) {
-    console.warn('Using local fallback for getPlaces:', error);
+  } catch (err) {
+    console.warn('Error fetching places directly from Supabase:', err);
+    places = memoryPlaces;
   }
-  const localPlaces = getLocalPlaces();
-  const firestoreIds = new Set(places.map((p) => p.placeId));
-  const missingLocal = localPlaces.filter((p) => !firestoreIds.has(p.placeId));
-  places = [...places, ...missingLocal];
-  saveLocalPlaces(places);
 
   const reviews = await getReviews();
 
-  // Re-calculate trust score & average rating dynamically
   return places.map((place) => {
     const placeReviews = reviews.filter((r) => r.placeId === place.placeId);
     if (placeReviews.length === 0) return place;
@@ -406,46 +307,48 @@ export async function addPlace(
     trustScore: 100,
   };
 
-  const localPlaces = getLocalPlaces();
-  localPlaces.unshift(newPlace);
-  saveLocalPlaces(localPlaces);
+  memoryPlaces.unshift(newPlace);
 
   try {
-    await setDoc(doc(db, PLACES_COL, placeId), newPlace);
+    await supabase.from('places').insert({
+      id: placeId,
+      name: newPlace.name,
+      category: newPlace.category,
+      address: newPlace.address,
+      image: newPlace.image,
+      location: newPlace.location,
+      average_rating: newPlace.averageRating,
+      review_count: newPlace.reviewCount,
+      trust_score: newPlace.trustScore,
+      added_by: newPlace.addedBy,
+      google_maps_url: newPlace.googleMapsUrl,
+      created_at: newPlace.createdAt,
+    });
   } catch (err) {
-    console.warn('Notice: Firestore addPlace fallback used:', err);
+    console.warn('Supabase addPlace error:', err);
   }
 
   return newPlace;
 }
 
 // -------------------------------------------------------------
-// REVIEWS METHODS
+// REVIEWS METHODS (SUPABASE)
 // -------------------------------------------------------------
 
 export async function getReviews(placeId?: string): Promise<Review[]> {
   let reviews: Review[] = [];
+
   try {
-    const reviewsSnap = await getDocs(collection(db, REVIEWS_COL));
-    if (reviewsSnap.empty) {
-      await seedInitialDataIfEmpty();
-      const retrySnap = await getDocs(collection(db, REVIEWS_COL));
-      if (retrySnap.empty) {
-        reviews = getLocalReviews();
-      } else {
-        reviews = retrySnap.docs.map((docSnap) => docSnap.data() as Review);
-      }
+    const { data, error } = await supabase.from('reviews').select('*');
+    if (!error && data && data.length > 0) {
+      reviews = data.map(mapRowToReview);
     } else {
-      reviews = reviewsSnap.docs.map((docSnap) => docSnap.data() as Review);
+      reviews = memoryReviews;
     }
-  } catch (error) {
-    console.warn('Using local fallback for getReviews:', error);
+  } catch (err) {
+    console.warn('Error fetching reviews directly from Supabase:', err);
+    reviews = memoryReviews;
   }
-  const localReviews = getLocalReviews();
-  const firestoreIds = new Set(reviews.map((r) => r.reviewId));
-  const missingLocal = localReviews.filter((r) => !firestoreIds.has(r.reviewId));
-  reviews = [...reviews, ...missingLocal];
-  saveLocalReviews(reviews);
 
   reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -475,7 +378,7 @@ export async function submitReviewWithAI(
     );
   }
 
-  // 1. Call AI Anti-Seeding endpoint
+  // 1. Call AI Anti-Seeding API
   let aiAnalysis: AIAnalysisResult;
   try {
     const res = await fetch('/api/ai/analyze-review', {
@@ -499,7 +402,7 @@ export async function submitReviewWithAI(
     };
   }
 
-  // 2. Create review object & save to local / Firestore
+  // 2. Create review object & save to Supabase
   const reviewId = 'rev_' + Date.now();
   const newReview: Review = {
     reviewId,
@@ -516,14 +419,25 @@ export async function submitReviewWithAI(
     detectedKeywords: aiAnalysis.detectedKeywords,
   };
 
-  const localReviews = getLocalReviews();
-  localReviews.unshift(newReview);
-  saveLocalReviews(localReviews);
+  memoryReviews.unshift(newReview);
 
   try {
-    await setDoc(doc(db, REVIEWS_COL, reviewId), newReview);
+    await supabase.from('reviews').insert({
+      id: reviewId,
+      place_id: placeId,
+      user_id: currentUser.uid.includes('user_') ? null : currentUser.uid,
+      user_name: currentUser.username,
+      user_avatar: currentUser.avatar,
+      rating,
+      content,
+      is_seeding: aiAnalysis.isSeeding,
+      seeding_reason: aiAnalysis.seedingReason,
+      confidence_score: aiAnalysis.confidenceScore,
+      detected_keywords: aiAnalysis.detectedKeywords,
+      created_at: newReview.createdAt,
+    });
   } catch (err) {
-    console.warn('Notice: Firestore submitReview fallback used:', err);
+    console.warn('Supabase submitReview error:', err);
   }
 
   // 3. Handle User Strike Penalties if AI flagged Seeding
@@ -549,23 +463,13 @@ export async function submitReviewWithAI(
 
 // Reset store to demo defaults
 export async function resetDemoData(): Promise<void> {
-  saveLocalUsers(INITIAL_USERS);
-  saveLocalPlaces(INITIAL_PLACES);
-  saveLocalReviews(INITIAL_REVIEWS);
-  setSessionUserId('guest');
-
+  memoryUsers = [...INITIAL_USERS];
+  memoryPlaces = [...INITIAL_PLACES];
+  memoryReviews = [...INITIAL_REVIEWS];
+  currentSessionUserId = null;
   try {
-    for (const user of INITIAL_USERS) {
-      await setDoc(doc(db, USERS_COL, user.uid), user);
-    }
-    for (const place of INITIAL_PLACES) {
-      await setDoc(doc(db, PLACES_COL, place.placeId), place);
-    }
-    for (const review of INITIAL_REVIEWS) {
-      await setDoc(doc(db, REVIEWS_COL, review.reviewId), review);
-    }
-    await signOut(auth);
+    await supabase.auth.signOut();
   } catch (err) {
-    console.warn('Notice: Firestore reset fallback used:', err);
+    console.warn('Reset error:', err);
   }
 }
