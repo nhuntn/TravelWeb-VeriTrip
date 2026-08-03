@@ -28,10 +28,38 @@ function saveStoredPlaces(places: Place[]): void {
   }
 }
 
+function getStoredReviews(): Review[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_REVIEWS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading reviews from localStorage', e);
+  }
+  return [...INITIAL_REVIEWS];
+}
+
+function saveStoredReviews(reviews: Review[]): void {
+  try {
+    localStorage.setItem(STORAGE_REVIEWS_KEY, JSON.stringify(reviews));
+  } catch (e) {
+    console.warn('Error saving reviews to localStorage', e);
+  }
+}
+
+// Helper to check for standard UUID string format
+function isValidUUID(uuid: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+}
+
 // Fallback initial data in memory if Supabase returns empty / disconnected
 let memoryUsers: User[] = [...INITIAL_USERS];
 let memoryPlaces: Place[] = getStoredPlaces();
-let memoryReviews: Review[] = [...INITIAL_REVIEWS];
+let memoryReviews: Review[] = getStoredReviews();
 let currentSessionUserId: string | null = null;
 
 // Helper mapping functions between Supabase DB rows and App Interfaces
@@ -151,6 +179,7 @@ export async function loginUser(email: string, password?: string): Promise<User>
   const pwd = password || '123456';
 
   let supabaseAuthUser: any = null;
+  let authErrorMsg: string | null = null;
 
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -170,19 +199,35 @@ export async function loginUser(email: string, password?: string): Promise<User>
       });
       if (!signUpError && signUpData.user) {
         supabaseAuthUser = signUpData.user;
+      } else {
+        authErrorMsg = error.message || signUpError?.message || 'Đăng nhập không thành công';
       }
     } else {
       supabaseAuthUser = data.user;
     }
-  } catch (err) {
+  } catch (err: any) {
     console.warn('Supabase auth sign-in notice:', err);
+    authErrorMsg = err.message || 'Lỗi kết nối dịch vụ xác thực';
   }
 
   const users = await getUsers();
   let user = users.find((u) => u.email.toLowerCase() === normalizedEmail);
 
-  if (!user) {
-    const uid = supabaseAuthUser?.id || 'user_' + Date.now();
+  if (user) {
+    if (supabaseAuthUser?.id && user.uid !== supabaseAuthUser.id) {
+      user.uid = supabaseAuthUser.id;
+      await updateUser(user);
+    }
+  } else {
+    // Determine user ID: prioritize Supabase Auth UUID
+    const uid = supabaseAuthUser?.id;
+    if (!uid) {
+      throw new Error(
+        authErrorMsg ||
+          'Đăng nhập không thành công. Vui lòng kiểm tra email, mật khẩu hoặc kết nối Supabase.'
+      );
+    }
+
     const username = normalizedEmail.split('@')[0];
     user = {
       uid,
@@ -216,7 +261,7 @@ export async function registerUser(data: {
     throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
   }
 
-  let uid = 'user_' + Date.now();
+  let uid: string | null = null;
   try {
     const { data: authData, error } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -229,11 +274,20 @@ export async function registerUser(data: {
       },
     });
 
-    if (!error && authData.user) {
+    if (error) {
+      throw new Error(error.message || 'Lỗi khi đăng ký với Supabase Auth.');
+    }
+
+    if (authData.user) {
       uid = authData.user.id;
     }
-  } catch (err) {
+  } catch (err: any) {
     console.warn('Supabase auth signUp notice:', err);
+    throw new Error(err.message || 'Không thể đăng ký tài khoản qua Supabase Auth.');
+  }
+
+  if (!uid) {
+    throw new Error('Đăng ký thất bại: Không tạo được ID người dùng hợp lệ từ Supabase.');
   }
 
   const newUser: User = {
@@ -255,11 +309,17 @@ export async function registerUser(data: {
 }
 
 export async function updateUser(updatedUser: User): Promise<void> {
-  const idx = memoryUsers.findIndex((u) => u.uid === updatedUser.uid);
+  const idx = memoryUsers.findIndex((u) => u.uid === updatedUser.uid || u.email.toLowerCase() === updatedUser.email.toLowerCase());
   if (idx !== -1) {
     memoryUsers[idx] = updatedUser;
   } else {
     memoryUsers.push(updatedUser);
+  }
+
+  // Only attempt upsert to public.users if updatedUser.uid is a valid UUID to prevent FK errors with auth.users
+  if (!isValidUUID(updatedUser.uid)) {
+    console.warn('Bỏ qua upsert Supabase users do UID không phải dạng UUID:', updatedUser.uid);
+    return;
   }
 
   try {
@@ -354,7 +414,7 @@ export async function getPlaces(): Promise<Place[]> {
 
     const trustScore = Math.max(
       0,
-      Math.round(((placeReviews.length - (placeReviews.length - cleanReviews.length)) / placeReviews.length) * 100)
+      Math.round((cleanReviews.length / placeReviews.length) * 100)
     );
 
     return {
@@ -440,18 +500,56 @@ export async function updatePlace(updatedPlace: Place): Promise<Place> {
 }
 
 // -------------------------------------------------------------
-// REVIEWS METHODS (SUPABASE)
+// REVIEWS METHODS (SUPABASE & LOCAL STORAGE)
 // -------------------------------------------------------------
 
+export async function syncAllReviewsToSupabase(reviewsToSync?: Review[]): Promise<void> {
+  const targetReviews = reviewsToSync || memoryReviews;
+  if (!targetReviews || targetReviews.length === 0) return;
+
+  const rows = targetReviews.map((r) => ({
+    id: r.reviewId,
+    place_id: r.placeId,
+    user_id: isValidUUID(r.userId) ? r.userId : null,
+    user_name: r.userName,
+    user_avatar: r.userAvatar,
+    rating: r.rating,
+    content: r.content,
+    is_seeding: r.isSeeding,
+    seeding_reason: r.seedingReason || '',
+    confidence_score: r.confidenceScore || 100,
+    detected_keywords: r.detectedKeywords || [],
+    created_at: r.createdAt || new Date().toISOString(),
+  }));
+
+  try {
+    const { error } = await supabase.from('reviews').upsert(rows, { onConflict: 'id' });
+    if (error) {
+      console.warn('Sync reviews to Supabase notice:', error.message || error);
+    }
+  } catch (err) {
+    console.warn('Failed to sync reviews to Supabase:', err);
+  }
+}
+
 export async function getReviews(placeId?: string): Promise<Review[]> {
-  let reviews: Review[] = [];
+  let reviews: Review[] = memoryReviews;
+
+  // Make sure local reviews are synced to Supabase in background
+  syncAllReviewsToSupabase(memoryReviews).catch(() => {});
 
   try {
     const { data, error } = await supabase.from('reviews').select('*');
     if (!error && data && data.length > 0) {
-      reviews = data.map(mapRowToReview);
+      const dbReviews = data.map(mapRowToReview);
+      const reviewMap = new Map<string, Review>();
+      memoryReviews.forEach((r) => reviewMap.set(r.reviewId, r));
+      dbReviews.forEach((r) => reviewMap.set(r.reviewId, r));
+      reviews = Array.from(reviewMap.values());
+      memoryReviews = reviews;
+      saveStoredReviews(reviews);
     } else {
-      reviews = memoryReviews;
+      await syncAllReviewsToSupabase(INITIAL_REVIEWS);
     }
   } catch (err) {
     console.warn('Error fetching reviews directly from Supabase:', err);
@@ -510,7 +608,7 @@ export async function submitReviewWithAI(
     };
   }
 
-  // 2. Create review object & save to Supabase
+  // 2. Create review object & save locally + to Supabase
   const reviewId = 'rev_' + Date.now();
   const newReview: Review = {
     reviewId,
@@ -528,12 +626,13 @@ export async function submitReviewWithAI(
   };
 
   memoryReviews.unshift(newReview);
+  saveStoredReviews(memoryReviews);
 
   try {
-    await supabase.from('reviews').insert({
+    await supabase.from('reviews').upsert({
       id: reviewId,
       place_id: placeId,
-      user_id: currentUser.uid.includes('user_') ? null : currentUser.uid,
+      user_id: isValidUUID(currentUser.uid) ? currentUser.uid : null,
       user_name: currentUser.username,
       user_avatar: currentUser.avatar,
       rating,
@@ -574,6 +673,8 @@ export async function resetDemoData(): Promise<void> {
   memoryUsers = [...INITIAL_USERS];
   memoryPlaces = [...INITIAL_PLACES];
   memoryReviews = [...INITIAL_REVIEWS];
+  saveStoredPlaces(memoryPlaces);
+  saveStoredReviews(memoryReviews);
   currentSessionUserId = null;
   try {
     await supabase.auth.signOut();
