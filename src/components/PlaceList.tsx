@@ -7,6 +7,7 @@ interface PlaceListProps {
   places: Place[];
   userLocation: LocationCoordinates | null;
   onSelectPlace: (place: Place) => void;
+  onEditPlace?: (place: Place) => void;
 }
 
 const CATEGORIES = [
@@ -17,7 +18,7 @@ const CATEGORIES = [
   { id: 'Vui chơi', label: 'Vui chơi', icon: Ticket },
 ];
 
-export const PlaceList: React.FC<PlaceListProps> = ({ places, userLocation, onSelectPlace }) => {
+export const PlaceList: React.FC<PlaceListProps> = ({ places, userLocation, onSelectPlace, onEditPlace }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [sortBy, setSortBy] = useState<'trust' | 'rating' | 'distance'>('trust');
@@ -113,6 +114,7 @@ export const PlaceList: React.FC<PlaceListProps> = ({ places, userLocation, onSe
               place={place}
               userLocation={userLocation}
               onSelect={onSelectPlace}
+              onEdit={onEditPlace}
             />
           ))}
         </div>

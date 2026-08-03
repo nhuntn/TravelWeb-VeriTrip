@@ -93,12 +93,12 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   };
 
   // Add place from OSM search result
-  const handleAddOsmPlace = (item: any) => {
+  const handleAddOsmPlace = async (item: any) => {
     const lat = parseFloat(item.lat);
     const lng = parseFloat(item.lon);
     const placeName = item.display_name.split(',')[0] || searchQuery;
 
-    const newPlace = addPlace({
+    const newPlace = await addPlace({
       name: placeName,
       category: 'Địa điểm du lịch',
       address: item.display_name,

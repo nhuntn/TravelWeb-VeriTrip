@@ -20,6 +20,7 @@ import {
   Navigation,
   ChevronDown,
   User as UserIcon,
+  Pencil,
 } from 'lucide-react';
 
 interface PlaceDetailModalProps {
@@ -30,6 +31,7 @@ interface PlaceDetailModalProps {
   onReviewSubmitted: () => void;
   onSwitchUser: (uid: string) => void;
   onOpenAuth?: () => void;
+  onEditPlace?: (place: Place) => void;
 }
 
 export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
@@ -40,6 +42,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
   onReviewSubmitted,
   onSwitchUser,
   onOpenAuth,
+  onEditPlace,
 }) => {
   // Review form state
   const [rating, setRating] = useState(5);
@@ -168,20 +171,32 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
               </p>
             </div>
 
-            {/* Google Maps Link Button in Banner */}
-            <a
-              href={
-                place.googleMapsUrl ||
-                `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((place.name + ' ' + place.address).trim())}`
-              }
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-lg transition shrink-0 active:scale-95"
-            >
-              <Navigation className="w-4 h-4" />
-              <span>Mở Google Maps</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+            {/* Action Buttons in Banner */}
+            <div className="flex items-center gap-2 shrink-0">
+              {onEditPlace && (
+                <button
+                  onClick={() => onEditPlace(place)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-bold text-xs border border-white/40 shadow-lg transition active:scale-95"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>Chỉnh sửa</span>
+                </button>
+              )}
+
+              <a
+                href={
+                  place.googleMapsUrl ||
+                  `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((place.name + ' ' + place.address).trim())}`
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-lg transition active:scale-95"
+              >
+                <Navigation className="w-4 h-4" />
+                <span>Mở Google Maps</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
           </div>
         </div>
 

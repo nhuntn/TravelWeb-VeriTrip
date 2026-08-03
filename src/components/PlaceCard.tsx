@@ -1,11 +1,12 @@
 import React from 'react';
 import { Place, LocationCoordinates } from '../types';
-import { Star, MapPin, ShieldCheck, AlertTriangle, ArrowRight, Phone, ExternalLink, Navigation } from 'lucide-react';
+import { Star, MapPin, ShieldCheck, AlertTriangle, ArrowRight, Phone, ExternalLink, Navigation, Pencil } from 'lucide-react';
 
 interface PlaceCardProps {
   place: Place;
   userLocation: LocationCoordinates | null;
   onSelect: (place: Place) => void;
+  onEdit?: (place: Place) => void;
 }
 
 // Calculate distance in kilometers
@@ -109,21 +110,38 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({ place, userLocation, onSel
             <ArrowRight className="w-3.5 h-3.5" />
           </div>
 
-          <a
-            href={
-              place.googleMapsUrl ||
-              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((place.name + ' ' + place.address).trim())}`
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="p-1.5 rounded-lg bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white transition flex items-center gap-1 text-[11px] font-bold border border-orange-200 dark:border-orange-800/60"
-            title="Mở trực tiếp trên Google Maps"
-          >
-            <Navigation className="w-3 h-3" />
-            <span>Maps</span>
-            <ExternalLink className="w-2.5 h-2.5" />
-          </a>
+          <div className="flex items-center gap-1.5">
+            {onEdit && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(place);
+                }}
+                className="p-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white transition flex items-center gap-1 text-[11px] font-bold border border-gray-200 dark:border-gray-700"
+                title="Chỉnh sửa địa điểm"
+              >
+                <Pencil className="w-3 h-3" />
+                <span>Sửa</span>
+              </button>
+            )}
+
+            <a
+              href={
+                place.googleMapsUrl ||
+                `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((place.name + ' ' + place.address).trim())}`
+              }
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="p-1.5 rounded-lg bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 hover:bg-orange-600 hover:text-white dark:hover:bg-orange-600 dark:hover:text-white transition flex items-center gap-1 text-[11px] font-bold border border-orange-200 dark:border-orange-800/60"
+              title="Mở trực tiếp trên Google Maps"
+            >
+              <Navigation className="w-3 h-3" />
+              <span>Maps</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -14,6 +14,7 @@ import { GoogleMapsView } from './components/GoogleMapsView';
 import { PlaceList } from './components/PlaceList';
 import { PlaceDetailModal } from './components/PlaceDetailModal';
 import { AddPlaceModal } from './components/AddPlaceModal';
+import { EditPlaceModal } from './components/EditPlaceModal';
 import { UserStatusModal } from './components/UserStatusModal';
 import { AuthModal } from './components/AuthModal';
 import {
@@ -39,6 +40,7 @@ export default function App() {
 
   // Modals
   const [isAddPlaceOpen, setIsAddPlaceOpen] = useState(false);
+  const [editingPlace, setEditingPlace] = useState<Place | null>(null);
   const [isUserStatusOpen, setIsUserStatusOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [pickedMapCoords, setPickedMapCoords] = useState<LocationCoordinates | null>(null);
@@ -345,6 +347,7 @@ export default function App() {
             places={places}
             userLocation={userLocation}
             onSelectPlace={(p) => setSelectedPlace(p)}
+            onEditPlace={(p) => setEditingPlace(p)}
           />
         )}
       </main>
@@ -359,6 +362,7 @@ export default function App() {
           onReviewSubmitted={reloadStoreData}
           onSwitchUser={handleSwitchUser}
           onOpenAuth={() => setIsAuthModalOpen(true)}
+          onEditPlace={(p) => setEditingPlace(p)}
         />
       )}
 
@@ -372,6 +376,22 @@ export default function App() {
           onPlaceAdded={(newPlace) => {
             reloadStoreData();
             setSelectedPlace(newPlace);
+          }}
+        />
+      )}
+
+      {/* Edit Place Modal */}
+      {editingPlace && (
+        <EditPlaceModal
+          place={editingPlace}
+          userLocation={userLocation}
+          currentUser={currentUser}
+          onClose={() => setEditingPlace(null)}
+          onPlaceUpdated={(updatedPlace) => {
+            reloadStoreData();
+            if (selectedPlace && selectedPlace.placeId === updatedPlace.placeId) {
+              setSelectedPlace(updatedPlace);
+            }
           }}
         />
       )}

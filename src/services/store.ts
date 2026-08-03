@@ -2,9 +2,35 @@ import { supabase } from './supabaseClient';
 import { INITIAL_PLACES, INITIAL_REVIEWS, INITIAL_USERS } from '../data/initialData';
 import { AIAnalysisResult, Place, Review, User } from '../types';
 
+const STORAGE_PLACES_KEY = 'veritrip_places_v3';
+const STORAGE_REVIEWS_KEY = 'veritrip_reviews_v3';
+
+function getStoredPlaces(): Place[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_PLACES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading places from localStorage', e);
+  }
+  return [...INITIAL_PLACES];
+}
+
+function saveStoredPlaces(places: Place[]): void {
+  try {
+    localStorage.setItem(STORAGE_PLACES_KEY, JSON.stringify(places));
+  } catch (e) {
+    console.warn('Error saving places to localStorage', e);
+  }
+}
+
 // Fallback initial data in memory if Supabase returns empty / disconnected
 let memoryUsers: User[] = [...INITIAL_USERS];
-let memoryPlaces: Place[] = [...INITIAL_PLACES];
+let memoryPlaces: Place[] = getStoredPlaces();
 let memoryReviews: Review[] = [...INITIAL_REVIEWS];
 let currentSessionUserId: string | null = null;
 
@@ -23,18 +49,21 @@ function mapRowToUser(row: any): User {
 }
 
 function mapRowToPlace(row: any): Place {
+  const imageUrl = row.image || row.imageUrl || row.image_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80';
   return {
     placeId: row.id || row.placeId,
     name: row.name,
-    category: row.category,
-    address: row.address,
-    image: row.image,
-    location: typeof row.location === 'string' ? JSON.parse(row.location) : row.location,
+    category: row.category || 'Địa điểm du lịch',
+    address: row.address || '',
+    imageUrl: imageUrl,
+    description: row.description || '',
+    phone: row.phone || '',
+    location: typeof row.location === 'string' ? JSON.parse(row.location) : (row.location || { lat: 15.3405, lng: 108.9212 }),
     averageRating: Number(row.average_rating ?? row.averageRating ?? 5.0),
     reviewCount: Number(row.review_count ?? row.reviewCount ?? 0),
     trustScore: Number(row.trust_score ?? row.trustScore ?? 100),
-    addedBy: row.added_by || row.addedBy,
-    googleMapsUrl: row.google_maps_url || row.googleMapsUrl,
+    addedBy: row.added_by || row.addedBy || 'Thành viên cộng đồng',
+    googleMapsUrl: row.google_maps_url || row.googleMapsUrl || '',
     createdAt: row.created_at || row.createdAt || new Date().toISOString(),
   };
 }
@@ -253,15 +282,58 @@ export async function updateUser(updatedUser: User): Promise<void> {
 // PLACES METHODS (SUPABASE)
 // -------------------------------------------------------------
 
+export async function syncAllPlacesToSupabase(placesToSync?: Place[]): Promise<void> {
+  const targetPlaces = placesToSync || memoryPlaces;
+  if (!targetPlaces || targetPlaces.length === 0) return;
+
+  const rows = targetPlaces.map((p) => ({
+    id: p.placeId,
+    name: p.name,
+    category: p.category || 'Địa điểm du lịch',
+    address: p.address || '',
+    description: p.description || '',
+    phone: p.phone || '',
+    image: p.imageUrl,
+    location: typeof p.location === 'object' ? JSON.stringify(p.location) : p.location,
+    average_rating: p.averageRating,
+    review_count: p.reviewCount,
+    trust_score: p.trustScore,
+    added_by: p.addedBy || 'Thành viên cộng đồng',
+    google_maps_url: p.googleMapsUrl || '',
+    created_at: p.createdAt || new Date().toISOString(),
+  }));
+
+  try {
+    const { error } = await supabase.from('places').upsert(rows, { onConflict: 'id' });
+    if (error) {
+      console.warn('Sync places to Supabase error:', error.message || error);
+    } else {
+      console.log(`Successfully synced ${rows.length} places to Supabase places table.`);
+    }
+  } catch (err) {
+    console.warn('Failed to sync places to Supabase:', err);
+  }
+}
+
 export async function getPlaces(): Promise<Place[]> {
-  let places: Place[] = [];
+  let places: Place[] = memoryPlaces;
+
+  // Make sure initial places and local memory places are synced to Supabase
+  syncAllPlacesToSupabase(memoryPlaces).catch(() => {});
 
   try {
     const { data, error } = await supabase.from('places').select('*');
     if (!error && data && data.length > 0) {
-      places = data.map(mapRowToPlace);
+      const dbPlaces = data.map(mapRowToPlace);
+      const placeMap = new Map<string, Place>();
+      memoryPlaces.forEach((p) => placeMap.set(p.placeId, p));
+      dbPlaces.forEach((p) => placeMap.set(p.placeId, p));
+      places = Array.from(placeMap.values());
+      memoryPlaces = places;
+      saveStoredPlaces(places);
     } else {
-      places = memoryPlaces;
+      // If Supabase table is empty or error, push initial places into Supabase
+      await syncAllPlacesToSupabase(INITIAL_PLACES);
     }
   } catch (err) {
     console.warn('Error fetching places directly from Supabase:', err);
@@ -308,20 +380,23 @@ export async function addPlace(
   };
 
   memoryPlaces.unshift(newPlace);
+  saveStoredPlaces(memoryPlaces);
 
   try {
-    await supabase.from('places').insert({
+    await supabase.from('places').upsert({
       id: placeId,
       name: newPlace.name,
       category: newPlace.category,
       address: newPlace.address,
-      image: newPlace.image,
-      location: newPlace.location,
+      description: newPlace.description || '',
+      phone: newPlace.phone || '',
+      image: newPlace.imageUrl,
+      location: typeof newPlace.location === 'object' ? JSON.stringify(newPlace.location) : newPlace.location,
       average_rating: newPlace.averageRating,
       review_count: newPlace.reviewCount,
       trust_score: newPlace.trustScore,
       added_by: newPlace.addedBy,
-      google_maps_url: newPlace.googleMapsUrl,
+      google_maps_url: newPlace.googleMapsUrl || '',
       created_at: newPlace.createdAt,
     });
   } catch (err) {
@@ -329,6 +404,39 @@ export async function addPlace(
   }
 
   return newPlace;
+}
+
+export async function updatePlace(updatedPlace: Place): Promise<Place> {
+  const index = memoryPlaces.findIndex((p) => p.placeId === updatedPlace.placeId);
+  if (index !== -1) {
+    memoryPlaces[index] = { ...memoryPlaces[index], ...updatedPlace };
+  } else {
+    memoryPlaces.unshift(updatedPlace);
+  }
+  saveStoredPlaces(memoryPlaces);
+
+  try {
+    await supabase.from('places').upsert({
+      id: updatedPlace.placeId,
+      name: updatedPlace.name,
+      category: updatedPlace.category,
+      address: updatedPlace.address,
+      description: updatedPlace.description || '',
+      phone: updatedPlace.phone || '',
+      image: updatedPlace.imageUrl,
+      location: typeof updatedPlace.location === 'object' ? JSON.stringify(updatedPlace.location) : updatedPlace.location,
+      average_rating: updatedPlace.averageRating,
+      review_count: updatedPlace.reviewCount,
+      trust_score: updatedPlace.trustScore,
+      added_by: updatedPlace.addedBy || 'Thành viên cộng đồng',
+      google_maps_url: updatedPlace.googleMapsUrl || '',
+      created_at: updatedPlace.createdAt,
+    });
+  } catch (err) {
+    console.warn('Supabase updatePlace error:', err);
+  }
+
+  return updatedPlace;
 }
 
 // -------------------------------------------------------------

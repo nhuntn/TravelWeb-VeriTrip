@@ -91,7 +91,7 @@ function PlacesSearchBar({
     }
   };
 
-  const handleImport = (googlePlace: any) => {
+  const handleImport = async (googlePlace: any) => {
     let imageUrl =
       'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80';
 
@@ -106,7 +106,7 @@ function PlacesSearchBar({
     const lat = typeof googlePlace.location?.lat === 'function' ? googlePlace.location.lat() : googlePlace.location?.lat || 21.0285;
     const lng = typeof googlePlace.location?.lng === 'function' ? googlePlace.location.lng() : googlePlace.location?.lng || 105.854;
 
-    const newPlace = addPlace({
+    const newPlace = await addPlace({
       name: typeof googlePlace.displayName === 'string' ? googlePlace.displayName : googlePlace.displayName?.text || 'Địa điểm Google Maps',
       category: 'Nhà hàng',
       address: googlePlace.formattedAddress || 'Địa chỉ từ Google Maps',
