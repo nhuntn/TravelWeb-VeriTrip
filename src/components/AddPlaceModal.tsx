@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LocationCoordinates, Place, User } from '../types';
 import { addPlace } from '../services/store';
-import { X, MapPin, PlusCircle, Image as ImageIcon, Building2, Phone, FileText, Compass, Loader2, Navigation, ExternalLink, Link2, Camera, Upload, Trash2, CameraOff, RefreshCw, Map as MapIcon } from 'lucide-react';
+import { X, MapPin, PlusCircle, Image as ImageIcon, Building2, Phone, FileText, Compass, Loader2, Navigation, ExternalLink, Link2, Camera, Upload, Trash2, CameraOff, RefreshCw, Map as MapIcon, CheckCircle2 } from 'lucide-react';
 import { MapLocationPicker } from './MapLocationPicker';
+import { parseCoordsFromGoogleMapsUrl } from '../utils/mapUtils';
 
 interface AddPlaceModalProps {
   userLocation: LocationCoordinates | null;

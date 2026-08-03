@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Place, LocationCoordinates } from '../types';
+import { Place, LocationCoordinates, User } from '../types';
 import { PlaceCard } from './PlaceCard';
 import { Search, SlidersHorizontal, Sparkles, MapPin, Building2, Utensils, Coffee, Pizza, Ticket } from 'lucide-react';
 
 interface PlaceListProps {
   places: Place[];
   userLocation: LocationCoordinates | null;
+  currentUser?: User | null;
   onSelectPlace: (place: Place) => void;
   onEditPlace?: (place: Place) => void;
 }
@@ -18,7 +19,7 @@ const CATEGORIES = [
   { id: 'Vui chơi', label: 'Vui chơi', icon: Ticket },
 ];
 
-export const PlaceList: React.FC<PlaceListProps> = ({ places, userLocation, onSelectPlace, onEditPlace }) => {
+export const PlaceList: React.FC<PlaceListProps> = ({ places, userLocation, currentUser, onSelectPlace, onEditPlace }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [sortBy, setSortBy] = useState<'trust' | 'rating' | 'distance'>('trust');
@@ -113,6 +114,7 @@ export const PlaceList: React.FC<PlaceListProps> = ({ places, userLocation, onSe
               key={place.placeId}
               place={place}
               userLocation={userLocation}
+              currentUser={currentUser}
               onSelect={onSelectPlace}
               onEdit={onEditPlace}
             />

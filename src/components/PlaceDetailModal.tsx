@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Place, Review, User, AISummary } from '../types';
 import { submitReviewWithAI, getUsers } from '../services/store';
+import { canEditPlace } from '../utils/userUtils';
 import {
   X,
   Star,
@@ -21,6 +22,7 @@ import {
   ChevronDown,
   User as UserIcon,
   Pencil,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface PlaceDetailModalProps {
@@ -173,7 +175,7 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
 
             {/* Action Buttons in Banner */}
             <div className="flex items-center gap-2 shrink-0">
-              {onEditPlace && (
+              {onEditPlace && canEditPlace(place, currentUser) && (
                 <button
                   onClick={() => onEditPlace(place)}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-bold text-xs border border-white/40 shadow-lg transition active:scale-95"
@@ -296,13 +298,21 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
                 </button>
                 <button
                   onClick={() => setReviewFilter('SEEDING')}
-                  className={`px-3 py-1 rounded-lg transition ${
+                  className={`px-3 py-1 rounded-lg transition flex items-center gap-1.5 ${
                     reviewFilter === 'SEEDING'
-                      ? 'bg-amber-500 text-white shadow-sm'
-                      : 'text-gray-500'
+                      ? 'bg-rose-600 text-white shadow-sm font-bold'
+                      : 'text-gray-500 hover:text-rose-600 dark:hover:text-rose-400'
                   }`}
                 >
-                  Cảnh báo Seeding ({reviews.filter((r) => r.isSeeding).length})
+                  <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                  <span>Bị gắn cờ Seeding</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                    reviewFilter === 'SEEDING'
+                      ? 'bg-white text-rose-700'
+                      : 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400'
+                  }`}>
+                    {reviews.filter((r) => r.isSeeding).length}
+                  </span>
                 </button>
               </div>
             </div>
@@ -425,7 +435,6 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
                 <button
                   onClick={() => {
                     if (onOpenAuth) onOpenAuth();
-                    else onSwitchUser('user_demo_1');
                   }}
                   className="px-3 py-1.5 bg-orange-600 text-white font-bold rounded-xl text-xs hover:bg-orange-700 transition shrink-0"
                 >

@@ -21,6 +21,7 @@ import {
   MapPin,
   Sparkles,
   ShieldCheck,
+  ShieldAlert,
   Compass,
   Building2,
   ListFilter,
@@ -183,11 +184,19 @@ export default function App() {
       />
 
       {/* City Switcher Banner */}
-      <div className="bg-orange-600 dark:bg-orange-950 text-white py-0.5 px-3 border-b border-orange-500/30 text-[10px] leading-tight">
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-nowrap gap-2 overflow-x-auto">
-          <div className="flex items-center gap-1 shrink-0 font-medium">
-            <Sparkles className="w-3 h-3 text-amber-300" />
-            <span className="font-bold">AI Anti-Seeding</span>
+      <div className="bg-orange-600 dark:bg-orange-950 text-white py-1 px-3 border-b border-orange-500/30 text-xs leading-tight">
+        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap sm:flex-nowrap gap-2">
+          <div className="flex items-center gap-2 shrink-0 font-medium">
+            <div className="flex items-center gap-1 font-bold text-amber-200">
+              <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+              <span>AI Anti-Seeding</span>
+            </div>
+            <span
+              className="inline-flex items-center gap-1.5 text-[11px] bg-rose-950/90 text-rose-100 border border-rose-400/50 px-2.5 py-0.5 rounded-full font-extrabold shadow-xs select-none"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-300 shrink-0" />
+              <span>Thước đo vi phạm: <strong className="text-amber-300">{reviews.filter((r) => r.isSeeding).length}</strong> đánh giá bị gắn cờ</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
@@ -248,10 +257,10 @@ export default function App() {
               </span>
             </div>
             <button
-              onClick={() => handleSwitchUser('user_demo_1')}
+              onClick={handleLogout}
               className="px-3 py-1.5 bg-white text-rose-800 rounded-xl font-bold shrink-0 hover:bg-rose-50 transition"
             >
-              Đổi sang tài khoản sạch
+              Đăng xuất
             </button>
           </div>
         )}
@@ -346,6 +355,7 @@ export default function App() {
           <PlaceList
             places={places}
             userLocation={userLocation}
+            currentUser={currentUser}
             onSelectPlace={(p) => setSelectedPlace(p)}
             onEditPlace={(p) => setEditingPlace(p)}
           />

@@ -11,7 +11,10 @@ function getStoredPlaces(): Place[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map((p: Place) => ({
+          ...p,
+          addedBy: (!p.addedBy || p.addedBy.startsWith('user_demo')) ? 'Thành viên cộng đồng' : p.addedBy,
+        }));
       }
     }
   } catch (e) {
@@ -34,7 +37,11 @@ function getStoredReviews(): Review[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map((r: Review) => ({
+          ...r,
+          userId: (!r.userId || r.userId.startsWith('user_demo') || r.userId.startsWith('user_seeder')) ? 'community_member' : r.userId,
+          userName: (r.userName === 'An Nguyễn (Traveler)' || r.userName === 'Chốt Đơn Booking' || r.userName === 'Lê Hoàng' || r.userName === 'Marketing Team') ? 'Thành viên cộng đồng' : r.userName,
+        }));
       }
     }
   } catch (e) {

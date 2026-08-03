@@ -21,8 +21,10 @@ import {
   RefreshCw,
   Map as MapIcon,
   Pencil,
+  CheckCircle2,
 } from 'lucide-react';
 import { MapLocationPicker } from './MapLocationPicker';
+import { parseCoordsFromGoogleMapsUrl } from '../utils/mapUtils';
 
 interface EditPlaceModalProps {
   place: Place;
@@ -60,6 +62,9 @@ export const EditPlaceModal: React.FC<EditPlaceModalProps> = ({
   const [googleMapsUrl, setGoogleMapsUrl] = useState(place.googleMapsUrl || '');
   const [coords, setCoords] = useState<LocationCoordinates>(
     place.location || userLocation || { lat: 15.3405, lng: 108.9212 }
+  );
+  const [parsedUrlCoords, setParsedUrlCoords] = useState<LocationCoordinates | null>(
+    place.googleMapsUrl ? parseCoordsFromGoogleMapsUrl(place.googleMapsUrl) : null
   );
 
   const [isLocating, setIsLocating] = useState(false);
@@ -156,6 +161,18 @@ export const EditPlaceModal: React.FC<EditPlaceModalProps> = ({
       }
     };
   }, [mediaStream]);
+
+  // Handle Google Maps URL change & parse coordinates
+  const handleUrlChange = (val: string) => {
+    setGoogleMapsUrl(val);
+    const parsed = parseCoordsFromGoogleMapsUrl(val);
+    if (parsed) {
+      setCoords(parsed);
+      setParsedUrlCoords(parsed);
+    } else {
+      setParsedUrlCoords(null);
+    }
+  };
 
   // Handle GPS Auto-detect location
   const handleGetDeviceGPS = () => {
@@ -290,6 +307,30 @@ export const EditPlaceModal: React.FC<EditPlaceModalProps> = ({
               placeholder="VD: 123 Đường Trần Phú, Phường Minh An, Hội An"
               className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
             />
+          </div>
+
+          {/* Google Maps Link */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Link2 className="w-4 h-4 text-orange-500" />
+                <span>Link địa chỉ Google Maps</span>
+              </span>
+              <span className="text-[10px] text-gray-400 font-normal">Tùy chọn</span>
+            </label>
+            <input
+              type="url"
+              value={googleMapsUrl}
+              onChange={(e) => handleUrlChange(e.target.value)}
+              placeholder="VD: https://maps.app.goo.gl/... hoặc https://www.google.com/maps/place/..."
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 font-medium"
+            />
+            {parsedUrlCoords && (
+              <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-50 dark:bg-emerald-950/50 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+                <span>Đã trích xuất tọa độ & định vị bản đồ: <b>{parsedUrlCoords.lat.toFixed(5)}, {parsedUrlCoords.lng.toFixed(5)}</b></span>
+              </div>
+            )}
           </div>
 
           {/* Coordinates & Map Selection */}
