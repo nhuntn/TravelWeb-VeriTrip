@@ -367,6 +367,7 @@ export default function App() {
         <AddPlaceModal
           userLocation={userLocation}
           pickedCoordinates={pickedMapCoords}
+          currentUser={currentUser}
           onClose={() => setIsAddPlaceOpen(false)}
           onPlaceAdded={(newPlace) => {
             reloadStoreData();
@@ -405,7 +406,7 @@ export default function App() {
       {/* Footer */}
       <footer className="mt-auto border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 py-6 text-center text-xs text-gray-500 space-y-1">
         <p className="font-medium text-gray-700 dark:text-gray-300">
-          TravelWeb © 2026 — Nền Tảng Du Lịch & Địa Điểm Ăn Uống Thông Minh Tích Hợp AI Anti-Seeding
+          VeriTrip © 2026 — Nền Tảng Du Lịch & Địa Điểm Ăn Uống Thông Minh Tích Hợp AI Anti-Seeding
         </p>
         <p>Phát triển bằng Next.js 15, Firebase Firestore & Google Gemini 3.6 Flash API</p>
       </footer>

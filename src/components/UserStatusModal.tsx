@@ -236,7 +236,9 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
               <UserIcon className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-base text-gray-900 dark:text-white">Quản Lý Tài Khoản</h3>
+              <h3 className="font-extrabold text-base text-gray-900 dark:text-white">
+                Welcome, {username || user.username}!
+              </h3>
               <p className="text-xs text-gray-500">Chỉnh sửa hồ sơ, độ uy tín & hoạt động</p>
             </div>
           </div>
@@ -265,14 +267,19 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
 
           <button
             onClick={() => setActiveTab('security')}
-            className={`flex-1 py-2 px-3 text-xs font-bold rounded-t-xl transition flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2 px-2.5 text-xs font-bold rounded-t-xl transition flex items-center justify-center gap-1.5 ${
               activeTab === 'security'
                 ? 'bg-white dark:bg-gray-900 text-orange-600 dark:text-orange-400 border-t border-x border-gray-200 dark:border-gray-800 shadow-sm'
                 : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200'
             }`}
           >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Độ uy tín ({strikes}/5)</span>
+            <Shield className="w-3.5 h-3.5 shrink-0" />
+            <span>Độ uy tín & Cảnh báo ({strikes}/5)</span>
+            {strikes > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white animate-pulse shrink-0">
+                Cảnh báo!
+              </span>
+            )}
           </button>
 
           <button
@@ -569,13 +576,18 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
                   </p>
                 </div>
               ) : strikes > 0 ? (
-                <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
-                  <div className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
-                    <ShieldAlert className="w-4 h-4 text-amber-600" />
-                    <span>Cảnh báo vi phạm seeding ({strikes}/5)</span>
+                <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-400 dark:border-amber-700 rounded-2xl text-xs text-amber-900 dark:text-amber-200 space-y-1.5 shadow-sm">
+                  <div className="font-extrabold flex items-center justify-between text-amber-900 dark:text-amber-300">
+                    <div className="flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4 text-amber-600 animate-pulse" />
+                      <span>Cảnh báo vi phạm seeding ({strikes}/5)</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white">
+                      Cảnh báo!!!
+                    </span>
                   </div>
-                  <p>
-                    Bạn đã bị Gemini AI cờ đỏ {strikes} lần vì gửi review mang tính chất quảng cáo/seeding. Thêm {5 - strikes} lần nữa tài khoản sẽ bị khóa 6 tháng.
+                  <p className="leading-relaxed">
+                    Bạn đã bị Gemini AI cờ đỏ <strong className="text-amber-700 dark:text-amber-300 underline">{strikes} lần</strong> vì gửi review mang tính chất quảng cáo/seeding. Thêm <strong className="text-rose-600 dark:text-rose-400">{5 - strikes} lần nữa</strong> tài khoản sẽ bị khóa 6 tháng.
                   </p>
                 </div>
               ) : (
@@ -597,6 +609,76 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
                 <p className="text-[11px] text-orange-800 dark:text-orange-300">
                   Hệ thống tự động phát hiện số điện thoại chốt đơn, câu từ quảng cáo dịch vụ ảo, hoặc bình luận spam lặp lại.
                 </p>
+              </div>
+
+              {/* FLAGGED COMMENTS SECTION */}
+              <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold text-xs text-gray-900 dark:text-white flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-rose-500 animate-pulse" />
+                    <span>Các Bình Luận Bị AI Gắn Cờ Seeding</span>
+                  </h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400">
+                    {reviews.filter((r) => r.isSeeding && (r.userId === user.uid || user.role === 'admin')).length} bình luận
+                  </span>
+                </div>
+
+                {reviews.filter((r) => r.isSeeding && (r.userId === user.uid || user.role === 'admin')).length === 0 ? (
+                  <div className="p-3 bg-gray-50 dark:bg-gray-800/40 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 text-center text-xs text-gray-400 space-y-1">
+                    <ShieldCheck className="w-6 h-6 text-emerald-500 mx-auto" />
+                    <p className="font-semibold text-gray-700 dark:text-gray-300">Không có bình luận nào bị gắn cờ</p>
+                    <p className="text-[10px]">Tất cả đánh giá của bạn đều minh bạch & tự nhiên!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                    {reviews
+                      .filter((r) => r.isSeeding && (r.userId === user.uid || user.role === 'admin'))
+                      .map((r) => {
+                        const targetPlace = places.find((p) => p.placeId === r.placeId);
+                        return (
+                          <div
+                            key={r.reviewId}
+                            className="p-3 bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/60 rounded-2xl space-y-2 text-xs"
+                          >
+                            <div className="flex items-center justify-between gap-2 border-b border-rose-200/60 dark:border-rose-800/40 pb-1.5">
+                              <div className="font-bold text-gray-900 dark:text-white truncate flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                                <span>{targetPlace?.name || 'Địa điểm du lịch'}</span>
+                              </div>
+                              <span className="text-[10px] font-extrabold text-rose-600 dark:text-rose-400 bg-rose-100 dark:bg-rose-900/60 px-2 py-0.5 rounded-full shrink-0">
+                                AI Seeding ({r.confidenceScore || 90}%)
+                              </span>
+                            </div>
+
+                            <p className="text-gray-800 dark:text-gray-200 font-medium italic bg-white/60 dark:bg-gray-900/60 p-2 rounded-xl border border-rose-100 dark:border-rose-900/40">
+                              "{r.content}"
+                            </p>
+
+                            <div className="space-y-1 text-[11px] text-rose-800 dark:text-rose-300">
+                              <div className="font-bold flex items-start gap-1">
+                                <AlertOctagon className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                                <span>Lý do AI cờ đỏ: {r.seedingReason || 'Phát hiện nội dung quảng cáo / số điện thoại seeding.'}</span>
+                              </div>
+
+                              {r.detectedKeywords && r.detectedKeywords.length > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                                  <span className="text-[10px] text-gray-500 font-semibold">Từ khóa vi phạm:</span>
+                                  {r.detectedKeywords.map((kw, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="px-1.5 py-0.5 bg-rose-200 dark:bg-rose-900 text-rose-800 dark:text-rose-200 font-mono text-[9px] rounded-md font-bold"
+                                    >
+                                      {kw}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -655,12 +737,31 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
                 ) : (
                   <div className="space-y-1.5 max-h-40 overflow-y-auto">
                     {userReviews.map((r) => (
-                      <div key={r.reviewId} className="p-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-800 space-y-1">
+                      <div
+                        key={r.reviewId}
+                        className={`p-2.5 rounded-xl border space-y-1 transition ${
+                          r.isSeeding
+                            ? 'bg-rose-50/80 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800'
+                            : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-800'
+                        }`}
+                      >
                         <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-amber-500">⭐ {r.rating} / 5</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-amber-500">⭐ {r.rating} / 5</span>
+                            {r.isSeeding && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-600 text-white flex items-center gap-0.5">
+                                🚩 AI Seeding
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] text-gray-400">{new Date(r.createdAt).toLocaleDateString('vi-VN')}</span>
                         </div>
                         <p className="text-gray-700 dark:text-gray-300 line-clamp-2">{r.content}</p>
+                        {r.isSeeding && (
+                          <p className="text-[10px] text-rose-600 dark:text-rose-400 font-semibold italic">
+                            Lý do: {r.seedingReason || 'Tài khoản vi phạm quy định quảng cáo rác'}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>

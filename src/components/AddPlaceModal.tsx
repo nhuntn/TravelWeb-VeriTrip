@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LocationCoordinates, Place } from '../types';
+import { LocationCoordinates, Place, User } from '../types';
 import { addPlace } from '../services/store';
-import { X, MapPin, PlusCircle, Image as ImageIcon, Building2, Phone, FileText, Compass, Loader2, Navigation, ExternalLink, Link2, Camera, Upload, Trash2, CameraOff, RefreshCw } from 'lucide-react';
+import { X, MapPin, PlusCircle, Image as ImageIcon, Building2, Phone, FileText, Compass, Loader2, Navigation, ExternalLink, Link2, Camera, Upload, Trash2, CameraOff, RefreshCw, Map as MapIcon } from 'lucide-react';
+import { MapLocationPicker } from './MapLocationPicker';
 
 interface AddPlaceModalProps {
   userLocation: LocationCoordinates | null;
   onClose: () => void;
   onPlaceAdded: (newPlace: Place) => void;
   pickedCoordinates?: LocationCoordinates | null;
+  currentUser?: User | null;
 }
 
 const CATEGORIES = ['Thắng cảnh thiên nhiên', 'Bãi biển', 'Du lịch sinh thái', 'Làng văn hóa', 'Nhà hàng', 'Quán cafe', 'Ăn vặt', 'Vui chơi', 'Khách sạn / Homestay'];
@@ -17,6 +19,7 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
   onClose,
   onPlaceAdded,
   pickedCoordinates,
+  currentUser,
 }) => {
   const defaultCoords = pickedCoordinates || userLocation || { lat: 15.3405, lng: 108.9212 };
 
@@ -30,6 +33,15 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
   const [coords, setCoords] = useState<LocationCoordinates>(defaultCoords);
   const [isLocating, setIsLocating] = useState(false);
   const [gpsSuccess, setGpsSuccess] = useState(false);
+  const [showMapPicker, setShowMapPicker] = useState(false);
+
+  const handleConfirmMapLocation = (pickedCoords: LocationCoordinates, pickedAddress: string) => {
+    setCoords(pickedCoords);
+    if (pickedAddress) {
+      setAddress(pickedAddress);
+    }
+    setGpsSuccess(true);
+  };
 
   // Camera & File upload state
   const [isLiveCameraActive, setIsLiveCameraActive] = useState(false);
@@ -223,7 +235,7 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
         'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80',
       location: coords,
       googleMapsUrl: finalMapsUrl,
-      addedBy: 'current_user',
+      addedBy: currentUser?.username || currentUser?.uid || 'Thành viên cộng đồng',
     });
 
     onPlaceAdded(newPlace);
@@ -257,41 +269,73 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
         {/* Scrollable Modal Content */}
         <div className="overflow-y-auto pr-1.5 space-y-3.5 flex-1 custom-scrollbar">
 
-          {/* Quick GPS Location Button */}
-          <div className="p-2.5 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/40 dark:to-amber-950/40 rounded-2xl border border-orange-200 dark:border-orange-800/60 flex items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-orange-600 text-white rounded-lg shadow-sm">
-                <Navigation className="w-3.5 h-3.5 animate-bounce" />
+          {/* Location Action Buttons Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Quick GPS Location Button */}
+            <div className="p-2.5 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/40 dark:to-amber-950/40 rounded-2xl border border-orange-200 dark:border-orange-800/60 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="p-1.5 bg-orange-600 text-white rounded-lg shadow-sm shrink-0">
+                  <Navigation className="w-3.5 h-3.5 animate-bounce" />
+                </div>
+                <div className="truncate">
+                  <div className="font-bold text-xs text-gray-900 dark:text-white truncate">Vị trí GPS</div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">Vị trí hiện tại</div>
+                </div>
               </div>
-              <div>
-                <div className="font-bold text-xs text-gray-900 dark:text-white">Vị trí hiện tại của bạn</div>
-                <div className="text-[10px] text-gray-500 dark:text-gray-400">Tự động điền địa chỉ GPS</div>
-              </div>
+
+              <button
+                type="button"
+                onClick={handleGetCurrentLocation}
+                disabled={isLocating}
+                className="px-2.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition shadow flex items-center gap-1 shrink-0"
+              >
+                {isLocating ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Đang vị trí...</span>
+                  </>
+                ) : (
+                  <>
+                    <Compass className="w-3.5 h-3.5" />
+                    <span>Lấy GPS</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={handleGetCurrentLocation}
-              disabled={isLocating}
-              className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition shadow flex items-center gap-1 shrink-0"
-            >
-              {isLocating ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Đang vị trí...</span>
-                </>
-              ) : (
-                <>
-                  <Compass className="w-3.5 h-3.5" />
-                  <span>Lấy GPS</span>
-                </>
-              )}
-            </button>
+            {/* Select Location on Map Button */}
+            <div className="p-2.5 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 rounded-2xl border border-amber-200 dark:border-amber-800/60 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 overflow-hidden">
+                <div className="p-1.5 bg-amber-600 text-white rounded-lg shadow-sm shrink-0">
+                  <MapIcon className="w-3.5 h-3.5" />
+                </div>
+                <div className="truncate">
+                  <div className="font-bold text-xs text-gray-900 dark:text-white truncate">Ghim trên bản đồ</div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate">Chọn vị trí bất kỳ</div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowMapPicker(true)}
+                className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition shadow flex items-center gap-1 shrink-0 active:scale-95"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+                <span>Chọn trên bản đồ</span>
+              </button>
+            </div>
           </div>
 
           {gpsSuccess && (
-            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 p-2 rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center gap-1.5">
-              <span>✓ Đã cập nhật tọa độ & địa chỉ theo vị trí GPS thực tế!</span>
+            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 p-2 rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center justify-between gap-1.5">
+              <span>✓ Đã cập nhật tọa độ & địa chỉ vị trí ({coords.lat.toFixed(4)}, {coords.lng.toFixed(4)})!</span>
+              <button
+                type="button"
+                onClick={() => setShowMapPicker(true)}
+                className="text-orange-600 dark:text-orange-400 hover:underline text-[10px] font-extrabold shrink-0"
+              >
+                Đổi vị trí
+              </button>
             </div>
           )}
 
@@ -558,6 +602,15 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
         </div>
 
       </div>
+
+      {/* Interactive Map Picker Modal */}
+      {showMapPicker && (
+        <MapLocationPicker
+          initialCoords={coords}
+          onConfirmLocation={handleConfirmMapLocation}
+          onClose={() => setShowMapPicker(false)}
+        />
+      )}
     </div>
   );
 };

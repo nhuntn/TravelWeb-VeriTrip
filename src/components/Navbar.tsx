@@ -52,7 +52,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="font-bold text-lg text-gray-900 dark:text-white tracking-tight">
-                Travel<span className="text-orange-600 dark:text-orange-400">Web</span>
+                Veri<span className="text-orange-600 dark:text-orange-400">Trip</span>
               </h1>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 hidden sm:block">

@@ -131,7 +131,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <Compass className="w-7 h-7" />
           </div>
           <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">
-            Tài Khoản Travel<span className="text-orange-600 dark:text-orange-400">Web</span>
+            Tài Khoản Veri<span className="text-orange-600 dark:text-orange-400">Trip</span>
           </h2>
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Đăng nhập để đăng đánh giá, đóng góp địa điểm và nhận điểm uy tín từ AI.
@@ -205,7 +205,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nhuntn1112@gmail.com..."
+                  placeholder="gmailcuaban@gmail.com..."
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"
                 />
               </div>
@@ -281,7 +281,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="youremail@gmail.com"
+                  placeholder="gmailcuaban@gmail.com..."
                   className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-xs focus:ring-2 focus:ring-orange-500 focus:outline-none"
                 />
               </div>

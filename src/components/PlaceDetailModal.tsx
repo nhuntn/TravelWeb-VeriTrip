@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Place, Review, User, AISummary } from '../types';
-import { submitReviewWithAI } from '../services/store';
+import { submitReviewWithAI, getUsers } from '../services/store';
 import {
   X,
   Star,
@@ -19,6 +19,7 @@ import {
   ExternalLink,
   Navigation,
   ChevronDown,
+  User as UserIcon,
 } from 'lucide-react';
 
 interface PlaceDetailModalProps {
@@ -52,6 +53,39 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
 
   // Track expanded seeding reasons for reviews
   const [expandedReasonIds, setExpandedReasonIds] = useState<Record<string, boolean>>({});
+
+  // Contributor details
+  const [contributorName, setContributorName] = useState<string>('Thành viên cộng đồng');
+  const [contributorAvatar, setContributorAvatar] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (place.addedBy) {
+      getUsers().then((users) => {
+        if (!isMounted) return;
+        const found = users.find(
+          (u) => u.uid === place.addedBy || u.email === place.addedBy || u.username === place.addedBy
+        );
+        if (found) {
+          setContributorName(found.username);
+          setContributorAvatar(found.avatar || null);
+        } else if (place.addedBy !== 'current_user' && place.addedBy !== 'system') {
+          setContributorName(place.addedBy);
+        } else if (currentUser) {
+          setContributorName(currentUser.username);
+          setContributorAvatar(currentUser.avatar || null);
+        } else {
+          setContributorName('Thành viên cộng đồng');
+        }
+      });
+    } else if (currentUser) {
+      setContributorName(currentUser.username);
+      setContributorAvatar(currentUser.avatar || null);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [place, currentUser]);
 
   const toggleReason = (reviewId: string) => {
     setExpandedReasonIds((prev) => ({
@@ -193,8 +227,17 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
 
             <div>
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Người đóng góp</span>
-              <div className="text-xs font-semibold text-gray-900 dark:text-gray-100 mt-0.5">
-                Thành viên cộng đồng
+              <div className="text-xs font-bold text-gray-900 dark:text-gray-100 mt-0.5 flex items-center gap-1.5">
+                {contributorAvatar ? (
+                  <img
+                    src={contributorAvatar}
+                    alt={contributorName}
+                    className="w-4 h-4 rounded-full object-cover shrink-0 border border-orange-200 dark:border-orange-800"
+                  />
+                ) : (
+                  <UserIcon className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                )}
+                <span className="truncate">{contributorName}</span>
               </div>
             </div>
           </div>
