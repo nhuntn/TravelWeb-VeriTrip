@@ -23,10 +23,12 @@ import {
   Video,
   Image as ImageIcon,
 } from 'lucide-react';
-import { updateUser, getPlaces, getReviews } from '../services/store';
+import { updateUser } from '../services/store';
 
 interface UserStatusModalProps {
   user: User | null;
+  places: Place[];
+  reviews: Review[];
   onClose: () => void;
   onSwitchUser: (uid: string) => void;
   onResetData: () => void;
@@ -37,6 +39,8 @@ interface UserStatusModalProps {
 
 export const UserStatusModal: React.FC<UserStatusModalProps> = ({
   user,
+  places,
+  reviews,
   onClose,
   onSwitchUser,
   onResetData,
@@ -79,8 +83,8 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
 
   // Fetch activity stats
-  const userPlaces: Place[] = getPlaces().filter((p) => p.addedBy === user.username || p.addedBy === user.uid);
-  const userReviews: Review[] = getReviews().filter((r) => r.userId === user.uid);
+  const userPlaces: Place[] = places.filter((p) => p.addedBy === user.username || p.addedBy === user.uid);
+  const userReviews: Review[] = reviews.filter((r) => r.userId === user.uid);
 
   const strikes = user.strikes;
   const isBanned = user.isBanned || strikes > 5;

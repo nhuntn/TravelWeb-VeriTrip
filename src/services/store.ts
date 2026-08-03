@@ -146,25 +146,29 @@ export async function seedInitialDataIfEmpty(): Promise<void> {
 // -------------------------------------------------------------
 
 export async function getUsers(): Promise<User[]> {
+  let users: User[] = [];
   try {
     const snap = await getDocs(collection(db, USERS_COL));
     if (snap.empty) {
       await seedInitialDataIfEmpty();
       const retrySnap = await getDocs(collection(db, USERS_COL));
       if (retrySnap.empty) {
-        return getLocalUsers();
+        users = getLocalUsers();
+      } else {
+        users = retrySnap.docs.map((docSnap) => docSnap.data() as User);
       }
-      const users = retrySnap.docs.map((docSnap) => docSnap.data() as User);
-      saveLocalUsers(users);
-      return users;
+    } else {
+      users = snap.docs.map((docSnap) => docSnap.data() as User);
     }
-    const users = snap.docs.map((docSnap) => docSnap.data() as User);
-    saveLocalUsers(users);
-    return users;
   } catch (error) {
     console.warn('Using local fallback for getUsers:', error);
-    return getLocalUsers();
   }
+  const localUsers = getLocalUsers();
+  const firestoreUids = new Set(users.map((u) => u.uid));
+  const missingLocal = localUsers.filter((u) => !firestoreUids.has(u.uid));
+  const merged = [...users, ...missingLocal];
+  saveLocalUsers(merged);
+  return merged;
 }
 
 export async function getCurrentUser(): Promise<User | null> {
@@ -183,6 +187,10 @@ export async function getCurrentUser(): Promise<User | null> {
     } else {
       const users = await getUsers();
       user = users.find((u) => u.uid === targetUid) || null;
+      if (!user) {
+        const localUsers = getLocalUsers();
+        user = localUsers.find((u) => u.uid === targetUid) || null;
+      }
     }
 
     if (user && user.strikes > 5 && !user.isBanned) {
@@ -235,6 +243,10 @@ export async function loginUser(email: string, password?: string): Promise<User>
 
   const users = await getUsers();
   let user = users.find((u) => u.email.toLowerCase() === normalizedEmail);
+  if (!user) {
+    const localUsers = getLocalUsers();
+    user = localUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
+  }
 
   if (user) {
     if (password && user.password && user.password !== password) {
@@ -341,16 +353,18 @@ export async function getPlaces(): Promise<Place[]> {
         places = getLocalPlaces();
       } else {
         places = retrySnap.docs.map((docSnap) => docSnap.data() as Place);
-        saveLocalPlaces(places);
       }
     } else {
       places = placesSnap.docs.map((docSnap) => docSnap.data() as Place);
-      saveLocalPlaces(places);
     }
   } catch (error) {
     console.warn('Using local fallback for getPlaces:', error);
-    places = getLocalPlaces();
   }
+  const localPlaces = getLocalPlaces();
+  const firestoreIds = new Set(places.map((p) => p.placeId));
+  const missingLocal = localPlaces.filter((p) => !firestoreIds.has(p.placeId));
+  places = [...places, ...missingLocal];
+  saveLocalPlaces(places);
 
   const reviews = await getReviews();
 
@@ -420,16 +434,18 @@ export async function getReviews(placeId?: string): Promise<Review[]> {
         reviews = getLocalReviews();
       } else {
         reviews = retrySnap.docs.map((docSnap) => docSnap.data() as Review);
-        saveLocalReviews(reviews);
       }
     } else {
       reviews = reviewsSnap.docs.map((docSnap) => docSnap.data() as Review);
-      saveLocalReviews(reviews);
     }
   } catch (error) {
     console.warn('Using local fallback for getReviews:', error);
-    reviews = getLocalReviews();
   }
+  const localReviews = getLocalReviews();
+  const firestoreIds = new Set(reviews.map((r) => r.reviewId));
+  const missingLocal = localReviews.filter((r) => !firestoreIds.has(r.reviewId));
+  reviews = [...reviews, ...missingLocal];
+  saveLocalReviews(reviews);
 
   reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 

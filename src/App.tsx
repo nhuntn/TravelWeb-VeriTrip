@@ -109,8 +109,11 @@ export default function App() {
     await reloadStoreData();
   };
 
-  const handleLoginSuccess = (_user: User) => {
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
     reloadStoreData();
+    setIsAuthModalOpen(false);
+    setIsUserStatusOpen(true);
   };
 
   const handleResetData = async () => {
@@ -376,6 +379,8 @@ export default function App() {
       {isUserStatusOpen && (
         <UserStatusModal
           user={currentUser}
+          places={places}
+          reviews={reviews}
           onClose={() => setIsUserStatusOpen(false)}
           onSwitchUser={handleSwitchUser}
           onResetData={handleResetData}
