@@ -338,11 +338,7 @@ export async function updateUser(updatedUser: User): Promise<void> {
       email: updatedUser.email,
       username: updatedUser.username,
       avatar: updatedUser.avatar,
-      strikes: updatedUser.strikes,
-      is_banned: updatedUser.isBanned,
-      ban_until: updatedUser.banUntil,
-      role: updatedUser.role,
-    });
+    }, { onConflict: 'id' });
   } catch (err) {
     console.warn('Supabase updateUser error:', err);
   }
@@ -665,6 +661,7 @@ export async function submitReviewWithAI(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          uid: currentUser.uid,
           currentStrikes: currentUser.strikes,
           isSeeding: true,
         }),
@@ -687,7 +684,12 @@ export async function submitReviewWithAI(
       currentUser.isBanned = true;
       currentUser.banUntil = banDate.toISOString();
     }
-    await updateUser(currentUser);
+    
+    // Update local memory user cache
+    const idx = memoryUsers.findIndex((u) => u.uid === currentUser.uid);
+    if (idx !== -1) {
+      memoryUsers[idx] = { ...currentUser };
+    }
     userStatusUpdated = currentUser;
   }
 

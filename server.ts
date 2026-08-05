@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -13,6 +14,17 @@ const app = express();
 app.use(express.json());
 
 const PORT = 3000;
+
+// Initialize Supabase Admin client server-side
+const getSupabaseAdmin = () => {
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !serviceKey) return null;
+  return createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false },
+  });
+};
+
 
 // Rate limiting for AI endpoints to prevent abuse and API quota exhaustion
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -303,9 +315,9 @@ app.post('/api/users/update-profile', (req, res) => {
 });
 
 // API Endpoint 4: Server-Side Strike & Ban Penalty Calculation
-app.post('/api/reviews/process-strike', (req, res) => {
+app.post('/api/reviews/process-strike', async (req, res) => {
   try {
-    const { currentStrikes, isSeeding } = req.body;
+    const { uid, currentStrikes, isSeeding } = req.body;
 
     if (!isSeeding) {
       return res.json({
@@ -315,15 +327,47 @@ app.post('/api/reviews/process-strike', (req, res) => {
       });
     }
 
-    const newStrikes = (currentStrikes || 0) + 1;
+    let newStrikes = (currentStrikes || 0) + 1;
     let isBanned = false;
     let banUntil: string | null = null;
+
+    const supabaseAdmin = getSupabaseAdmin();
+    if (supabaseAdmin && uid) {
+      try {
+        const { data: dbUser } = await supabaseAdmin
+          .from('users')
+          .select('strikes, is_banned')
+          .eq('id', uid)
+          .maybeSingle();
+
+        if (dbUser) {
+          newStrikes = (dbUser.strikes || 0) + 1;
+        }
+      } catch (e) {
+        console.warn('Notice reading user from Supabase admin:', e);
+      }
+    }
 
     if (newStrikes > 5) {
       isBanned = true;
       const banDate = new Date();
       banDate.setDate(banDate.getDate() + 180);
       banUntil = banDate.toISOString();
+    }
+
+    if (supabaseAdmin && uid) {
+      try {
+        await supabaseAdmin
+          .from('users')
+          .update({
+            strikes: newStrikes,
+            is_banned: isBanned,
+            ban_until: banUntil,
+          })
+          .eq('id', uid);
+      } catch (e) {
+        console.warn('Notice updating strikes via Supabase admin:', e);
+      }
     }
 
     return res.json({
@@ -335,9 +379,10 @@ app.post('/api/reviews/process-strike', (req, res) => {
         : `Cảnh báo: Bạn đã bị ghi nhận ${newStrikes}/5 lần vi phạm seeding.`,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'Lỗi xử lý vi phạm', details: err.message });
+    return res.status(500).json({ error: 'Lỗi xử lý vi phạm' });
   }
 });
+
 
 // Vite Integration
 async function startServer() {
