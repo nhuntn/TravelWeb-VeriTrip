@@ -18,8 +18,11 @@ const PORT = 3000;
 // Initialize Supabase Admin client server-side
 const getSupabaseAdmin = () => {
   const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !serviceKey) return null;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceKey) {
+    console.warn('⚠️ SUPABASE_SERVICE_ROLE_KEY chưa được cấu hình. Các thao tác ghi đè RLS admin sẽ bị vô hiệu hóa.');
+    return null;
+  }
   return createClient(supabaseUrl, serviceKey, {
     auth: { persistSession: false },
   });
@@ -314,10 +317,39 @@ app.post('/api/users/update-profile', (req, res) => {
   }
 });
 
-// API Endpoint 4: Server-Side Strike & Ban Penalty Calculation
+// API Endpoint 4: Server-Side Strike & Ban Penalty Calculation (Authenticated)
 app.post('/api/reviews/process-strike', async (req, res) => {
   try {
-    const { uid, currentStrikes, isSeeding } = req.body;
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Yêu cầu token xác thực người dùng (Bearer token)' });
+    }
+
+    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    let authenticatedUid: string | null = null;
+    if (supabaseAdmin) {
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+      if (!authErr && authData?.user) {
+        authenticatedUid = authData.user.id;
+      }
+    } else if (supabaseUrl && anonKey) {
+      const anonClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
+      const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
+      if (!authErr && authData?.user) {
+        authenticatedUid = authData.user.id;
+      }
+    }
+
+    if (!authenticatedUid) {
+      return res.status(401).json({ error: 'Xác thực token người dùng không thành công hoặc token đã hết hạn' });
+    }
+
+    const { currentStrikes, isSeeding } = req.body;
 
     if (!isSeeding) {
       return res.json({
@@ -331,13 +363,12 @@ app.post('/api/reviews/process-strike', async (req, res) => {
     let isBanned = false;
     let banUntil: string | null = null;
 
-    const supabaseAdmin = getSupabaseAdmin();
-    if (supabaseAdmin && uid) {
+    if (supabaseAdmin) {
       try {
         const { data: dbUser } = await supabaseAdmin
           .from('users')
           .select('strikes, is_banned')
-          .eq('id', uid)
+          .eq('id', authenticatedUid)
           .maybeSingle();
 
         if (dbUser) {
@@ -355,7 +386,7 @@ app.post('/api/reviews/process-strike', async (req, res) => {
       banUntil = banDate.toISOString();
     }
 
-    if (supabaseAdmin && uid) {
+    if (supabaseAdmin) {
       try {
         await supabaseAdmin
           .from('users')
@@ -364,7 +395,7 @@ app.post('/api/reviews/process-strike', async (req, res) => {
             is_banned: isBanned,
             ban_until: banUntil,
           })
-          .eq('id', uid);
+          .eq('id', authenticatedUid);
       } catch (e) {
         console.warn('Notice updating strikes via Supabase admin:', e);
       }

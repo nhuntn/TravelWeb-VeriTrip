@@ -657,11 +657,18 @@ export async function submitReviewWithAI(
   let userStatusUpdated: User | null = null;
   if (aiAnalysis.isSeeding) {
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const strikeRes = await fetch('/api/reviews/process-strike', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
-          uid: currentUser.uid,
           currentStrikes: currentUser.strikes,
           isSeeding: true,
         }),
