@@ -2,7 +2,6 @@ export interface User {
   uid: string;
   email: string;
   username: string;
-  password?: string;
   avatar?: string;
   strikes: number;
   isBanned: boolean;

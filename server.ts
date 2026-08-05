@@ -14,6 +14,31 @@ app.use(express.json());
 
 const PORT = 3000;
 
+// Rate limiting for AI endpoints to prevent abuse and API quota exhaustion
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const aiRateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const clientIp = (req.headers['x-forwarded-for'] as string) || req.ip || 'client-ip';
+  const now = Date.now();
+  const windowMs = 60 * 1000; // 1 minute
+  const maxRequests = 20;
+
+  const record = rateLimitMap.get(clientIp) || { count: 0, resetTime: now + windowMs };
+  if (now > record.resetTime) {
+    record.count = 0;
+    record.resetTime = now + windowMs;
+  }
+
+  record.count += 1;
+  rateLimitMap.set(clientIp, record);
+
+  if (record.count > maxRequests) {
+    return res.status(429).json({ error: 'Bạn đã gửi quá nhiều yêu cầu AI. Vui lòng chờ 1 phút trước khi thử lại.' });
+  }
+  next();
+};
+
+app.use('/api/ai', aiRateLimiter);
+
 // Initialize Gemini Client server-side
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -37,6 +62,10 @@ app.post('/api/ai/analyze-review', async (req, res) => {
 
     if (!reviewContent || typeof reviewContent !== 'string') {
       return res.status(400).json({ error: 'Nội dung đánh giá không hợp lệ' });
+    }
+
+    if (reviewContent.length > 2000) {
+      return res.status(400).json({ error: 'Nội dung đánh giá vượt quá độ dài tối đa cho phép (2000 ký tự)' });
     }
 
     const ai = getGeminiClient();
@@ -127,8 +156,7 @@ Hãy phân tích kỹ và trả về kết quả dưới dạng định dạng J
   } catch (err: any) {
     console.error('Error in analyze-review:', err);
     return res.status(500).json({
-      error: 'Lỗi hệ thống phân tích đánh giá',
-      details: err.message,
+      error: 'Lỗi xử lý phân tích đánh giá. Vui lòng thử lại sau.',
     });
   }
 });
@@ -244,7 +272,7 @@ Trả về JSON chuẩn.
     }
   } catch (err: any) {
     console.error('Error in summarize-place:', err);
-    return res.status(500).json({ error: 'Lỗi tóm tắt', details: err.message });
+    return res.status(500).json({ error: 'Lỗi tóm tắt địa điểm. Vui lòng thử lại sau.' });
   }
 });
 

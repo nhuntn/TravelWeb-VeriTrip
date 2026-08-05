@@ -24,6 +24,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { updateUser } from '../services/store';
+import { supabase } from '../services/supabaseClient';
 
 interface UserStatusModalProps {
   user: User | null;
@@ -196,19 +197,26 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
         setSaveError('Mật khẩu mới và nhập lại mật khẩu không trùng khớp.');
         return;
       }
-      if (newPassword.length < 4) {
-        setSaveError('Mật khẩu mới phải có ít nhất 4 ký tự.');
+      if (newPassword.length < 6) {
+        setSaveError('Mật khẩu mới phải có ít nhất 6 ký tự.');
         return;
       }
     }
 
     try {
+      if (newPassword.trim()) {
+        const { error: pwdErr } = await supabase.auth.updateUser({ password: newPassword.trim() });
+        if (pwdErr) {
+          setSaveError(`Lỗi đổi mật khẩu Auth: ${pwdErr.message}`);
+          return;
+        }
+      }
+
       const updated: User = {
-        ...user,
+        ...user!,
         username: username.trim(),
         email: email.trim(),
         avatar: avatar.trim(),
-        password: newPassword.trim() ? newPassword.trim() : user.password,
       };
 
       await updateUser(updated);

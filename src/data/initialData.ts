@@ -1,6 +1,25 @@
 import { Place, Review, User } from '../types';
 
-export const INITIAL_USERS: User[] = [];
+export const INITIAL_USERS: User[] = [
+  {
+    uid: 'admin_user_01',
+    email: 'admin@veritrip.vn',
+    username: 'Quản trị viên Hệ thống',
+    avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=AdminVeriTrip',
+    strikes: 0,
+    isBanned: false,
+    role: 'admin',
+  },
+  {
+    uid: 'community_member',
+    email: 'user@veritrip.vn',
+    username: 'Thành viên cộng đồng',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    strikes: 0,
+    isBanned: false,
+    role: 'user',
+  },
+];
 
 export const INITIAL_PLACES: Place[] = [
   {
