@@ -438,7 +438,7 @@ export default function App() {
         <p className="font-medium text-gray-700 dark:text-gray-300">
           VeriTrip © 2026 — Nền Tảng Du Lịch & Địa Điểm Ăn Uống Thông Minh Tích Hợp AI Anti-Seeding
         </p>
-        <p>Phát triển bằng Next.js 15, Firebase Firestore & Google Gemini 3.6 Flash API</p>
+        <p>Phát triển bằng React, Vite, Express, Supabase & Google Gemini AI Anti-Seeding</p>
       </footer>
 
     </div>

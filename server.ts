@@ -82,7 +82,7 @@ Hãy phân tích kỹ và trả về kết quả dưới dạng định dạng J
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -205,7 +205,7 @@ Trả về JSON chuẩn.
 
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
+        model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
@@ -245,6 +245,69 @@ Trả về JSON chuẩn.
   } catch (err: any) {
     console.error('Error in summarize-place:', err);
     return res.status(500).json({ error: 'Lỗi tóm tắt', details: err.message });
+  }
+});
+
+// API Endpoint 3: Secure Profile Update (Prevents Role/Strike/Ban Privilege Escalation)
+app.post('/api/users/update-profile', (req, res) => {
+  try {
+    const { uid, email, username, avatar } = req.body;
+
+    if (!uid || !email) {
+      return res.status(400).json({ error: 'Thiếu thông tin người dùng hợp lệ' });
+    }
+
+    // Return sanitized object stripped of role, strikes, is_banned, ban_until
+    const sanitizedProfile = {
+      uid,
+      email,
+      username: typeof username === 'string' ? username.trim() : email.split('@')[0],
+      avatar: typeof avatar === 'string' ? avatar : `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
+    };
+
+    return res.json({
+      success: true,
+      profile: sanitizedProfile,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Lỗi cập nhật hồ sơ', details: err.message });
+  }
+});
+
+// API Endpoint 4: Server-Side Strike & Ban Penalty Calculation
+app.post('/api/reviews/process-strike', (req, res) => {
+  try {
+    const { currentStrikes, isSeeding } = req.body;
+
+    if (!isSeeding) {
+      return res.json({
+        strikes: currentStrikes || 0,
+        isBanned: false,
+        banUntil: null,
+      });
+    }
+
+    const newStrikes = (currentStrikes || 0) + 1;
+    let isBanned = false;
+    let banUntil: string | null = null;
+
+    if (newStrikes > 5) {
+      isBanned = true;
+      const banDate = new Date();
+      banDate.setDate(banDate.getDate() + 180);
+      banUntil = banDate.toISOString();
+    }
+
+    return res.json({
+      strikes: newStrikes,
+      isBanned,
+      banUntil,
+      penaltyMessage: isBanned
+        ? `Tài khoản bị tạm khóa 180 ngày do tích lũy ${newStrikes} lần vi phạm seeding.`
+        : `Cảnh báo: Bạn đã bị ghi nhận ${newStrikes}/5 lần vi phạm seeding.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Lỗi xử lý vi phạm', details: err.message });
   }
 });
 

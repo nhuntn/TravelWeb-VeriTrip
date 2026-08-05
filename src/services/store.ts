@@ -186,7 +186,6 @@ export async function loginUser(email: string, password?: string): Promise<User>
   const pwd = password || '123456';
 
   let supabaseAuthUser: any = null;
-  let authErrorMsg: string | null = null;
 
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -195,26 +194,14 @@ export async function loginUser(email: string, password?: string): Promise<User>
     });
 
     if (error) {
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password: pwd,
-        options: {
-          data: {
-            username: normalizedEmail.split('@')[0],
-          },
-        },
-      });
-      if (!signUpError && signUpData.user) {
-        supabaseAuthUser = signUpData.user;
-      } else {
-        authErrorMsg = error.message || signUpError?.message || 'Đăng nhập không thành công';
-      }
-    } else {
-      supabaseAuthUser = data.user;
+      throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin hoặc đăng ký tài khoản mới.');
     }
+    supabaseAuthUser = data.user;
   } catch (err: any) {
+    if (err.message && err.message.includes('Email hoặc mật khẩu')) {
+      throw err;
+    }
     console.warn('Supabase auth sign-in notice:', err);
-    authErrorMsg = err.message || 'Lỗi kết nối dịch vụ xác thực';
   }
 
   const users = await getUsers();
@@ -225,19 +212,10 @@ export async function loginUser(email: string, password?: string): Promise<User>
       user.uid = supabaseAuthUser.id;
       await updateUser(user);
     }
-  } else {
-    // Determine user ID: prioritize Supabase Auth UUID
-    const uid = supabaseAuthUser?.id;
-    if (!uid) {
-      throw new Error(
-        authErrorMsg ||
-          'Đăng nhập không thành công. Vui lòng kiểm tra email, mật khẩu hoặc kết nối Supabase.'
-      );
-    }
-
+  } else if (supabaseAuthUser) {
     const username = normalizedEmail.split('@')[0];
     user = {
-      uid,
+      uid: supabaseAuthUser.id,
       email: normalizedEmail,
       username: username.charAt(0).toUpperCase() + username.slice(1),
       avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
@@ -247,6 +225,8 @@ export async function loginUser(email: string, password?: string): Promise<User>
       role: 'user',
     };
     await updateUser(user);
+  } else {
+    throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin hoặc chuyển sang tab Đăng ký.');
   }
 
   currentSessionUserId = user.uid;
@@ -316,6 +296,29 @@ export async function registerUser(data: {
 }
 
 export async function updateUser(updatedUser: User): Promise<void> {
+  // Sanitize via server endpoint to prevent privilege escalation
+  try {
+    const res = await fetch('/api/users/update-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: updatedUser.uid,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        avatar: updatedUser.avatar,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.profile) {
+        updatedUser.username = data.profile.username;
+        updatedUser.avatar = data.profile.avatar;
+      }
+    }
+  } catch (e) {
+    // Continue with local update if offline
+  }
+
   const idx = memoryUsers.findIndex((u) => u.uid === updatedUser.uid || u.email.toLowerCase() === updatedUser.email.toLowerCase());
   if (idx !== -1) {
     memoryUsers[idx] = updatedUser;
@@ -654,11 +657,31 @@ export async function submitReviewWithAI(
     console.warn('Supabase submitReview error:', err);
   }
 
-  // 3. Handle User Strike Penalties if AI flagged Seeding
+  // 3. Handle User Strike Penalties if AI flagged Seeding via secure server endpoint
   let userStatusUpdated: User | null = null;
   if (aiAnalysis.isSeeding) {
-    currentUser.strikes += 1;
-    if (currentUser.strikes > 5) {
+    try {
+      const strikeRes = await fetch('/api/reviews/process-strike', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentStrikes: currentUser.strikes,
+          isSeeding: true,
+        }),
+      });
+      if (strikeRes.ok) {
+        const penalty = await strikeRes.json();
+        currentUser.strikes = penalty.strikes;
+        currentUser.isBanned = penalty.isBanned;
+        currentUser.banUntil = penalty.banUntil;
+      } else {
+        currentUser.strikes += 1;
+      }
+    } catch (e) {
+      currentUser.strikes += 1;
+    }
+
+    if (currentUser.strikes > 5 && !currentUser.isBanned) {
       const banDate = new Date();
       banDate.setDate(banDate.getDate() + 180);
       currentUser.isBanned = true;
