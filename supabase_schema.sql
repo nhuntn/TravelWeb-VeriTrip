@@ -61,11 +61,16 @@ CREATE TABLE IF NOT EXISTS public.places (
   average_rating NUMERIC(3, 1) NOT NULL DEFAULT 5.0,
   review_count INTEGER NOT NULL DEFAULT 0,
   trust_score INTEGER NOT NULL DEFAULT 100,
-  added_by TEXT NOT NULL DEFAULT 'Thành viên cộng đồng',
+  added_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  added_by_name TEXT NOT NULL DEFAULT 'Thành viên cộng đồng',
   owner_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   google_maps_url TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Migration snippet to ensure existing databases have owner_id and added_by_name columns:
+-- ALTER TABLE public.places ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+-- ALTER TABLE public.places ADD COLUMN IF NOT EXISTS added_by_name TEXT NOT NULL DEFAULT 'Thành viên cộng đồng';
 
 -- Enable RLS on places
 ALTER TABLE public.places ENABLE ROW LEVEL SECURITY;

@@ -358,21 +358,16 @@ app.post('/api/reviews/process-strike', async (req, res) => {
     }
 
     const supabaseAdmin = getSupabaseAdmin();
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseAdmin) {
+      return res.status(503).json({
+        error: 'Chức năng xử lý vi phạm hiện không khả dụng do chưa cấu hình SUPABASE_SERVICE_ROLE_KEY trên server.',
+      });
+    }
 
     let authenticatedUid: string | null = null;
-    if (supabaseAdmin) {
-      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
-      if (!authErr && authData?.user) {
-        authenticatedUid = authData.user.id;
-      }
-    } else if (supabaseUrl && anonKey) {
-      const anonClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
-      const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
-      if (!authErr && authData?.user) {
-        authenticatedUid = authData.user.id;
-      }
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (!authErr && authData?.user) {
+      authenticatedUid = authData.user.id;
     }
 
     if (!authenticatedUid) {

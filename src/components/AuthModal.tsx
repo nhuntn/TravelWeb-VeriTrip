@@ -57,6 +57,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setError('Vui lòng nhập địa chỉ Email.');
       return;
     }
+    if (!password.trim()) {
+      setError('Vui lòng nhập Mật khẩu.');
+      return;
+    }
 
     try {
       const user = await loginUser(email, password);
@@ -77,6 +81,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (!username.trim() || !email.trim()) {
       setError('Vui lòng điền đầy đủ Tên người dùng và Email.');
+      return;
+    }
+    if (!password.trim() || password.trim().length < 6) {
+      setError('Mật khẩu phải có ít nhất 6 ký tự.');
       return;
     }
 

@@ -185,7 +185,10 @@ export async function logoutUser(): Promise<void> {
 
 export async function loginUser(email: string, password?: string): Promise<User> {
   const normalizedEmail = email.trim().toLowerCase();
-  const pwd = password || '123456';
+  if (!password || !password.trim()) {
+    throw new Error('Vui lòng nhập mật khẩu.');
+  }
+  const pwd = password.trim();
 
   let supabaseAuthUser: any = null;
 
@@ -200,10 +203,7 @@ export async function loginUser(email: string, password?: string): Promise<User>
     }
     supabaseAuthUser = data.user;
   } catch (err: any) {
-    if (err.message && err.message.includes('Email hoặc mật khẩu')) {
-      throw err;
-    }
-    console.warn('Supabase auth sign-in notice:', err);
+    throw new Error(err.message || 'Không thể kết nối máy chủ xác thực. Vui lòng thử lại.');
   }
 
   const users = await getUsers();
@@ -228,7 +228,7 @@ export async function loginUser(email: string, password?: string): Promise<User>
     };
     await updateUser(user);
   } else {
-    throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin hoặc chuyển sang tab Đăng ký.');
+    throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin.');
   }
 
   currentSessionUserId = user.uid;
@@ -242,7 +242,10 @@ export async function registerUser(data: {
   avatar?: string;
 }): Promise<User> {
   const normalizedEmail = data.email.trim().toLowerCase();
-  const pwd = data.password || '123456';
+  const pwd = data.password ? data.password.trim() : '';
+  if (!pwd || pwd.length < 6) {
+    throw new Error('Mật khẩu phải chứa ít nhất 6 ký tự.');
+  }
 
   const users = await getUsers();
   const existing = users.find((u) => u.email.toLowerCase() === normalizedEmail);
@@ -357,6 +360,22 @@ export async function updateUser(updatedUser: User): Promise<void> {
 // PLACES METHODS (SUPABASE)
 // -------------------------------------------------------------
 
+async function safeUpsertPlaces(rows: any[]) {
+  if (!rows || rows.length === 0) return;
+  const { error } = await supabase.from('places').upsert(rows, { onConflict: 'id' });
+  if (error) {
+    if (error.message?.includes('owner_id') || error.code === 'PGRST204' || String(error.message).includes('column')) {
+      const rowsWithoutOwner = rows.map(({ owner_id, ...rest }) => rest);
+      const { error: retryErr } = await supabase.from('places').upsert(rowsWithoutOwner, { onConflict: 'id' });
+      if (retryErr) {
+        console.warn('Sync places retry error:', retryErr.message || retryErr);
+      }
+    } else {
+      console.warn('Sync places error:', error.message || error);
+    }
+  }
+}
+
 export async function syncAllPlacesToSupabase(placesToSync?: Place[]): Promise<void> {
   const targetPlaces = placesToSync || memoryPlaces;
   if (!targetPlaces || targetPlaces.length === 0) return;
@@ -381,12 +400,7 @@ export async function syncAllPlacesToSupabase(placesToSync?: Place[]): Promise<v
   }));
 
   try {
-    const { error } = await supabase.from('places').upsert(rows, { onConflict: 'id' });
-    if (error) {
-      console.warn('Sync places to Supabase error:', error.message || error);
-    } else {
-      console.log(`Successfully synced ${rows.length} places to Supabase places table.`);
-    }
+    await safeUpsertPlaces(rows);
   } catch (err) {
     console.warn('Failed to sync places to Supabase:', err);
   }
@@ -471,7 +485,7 @@ export async function addPlace(
   saveStoredPlaces(memoryPlaces);
 
   try {
-    await supabase.from('places').upsert({
+    await safeUpsertPlaces([{
       id: placeId,
       name: newPlace.name,
       category: newPlace.category,
@@ -488,7 +502,7 @@ export async function addPlace(
       owner_id: effectiveUid,
       google_maps_url: newPlace.googleMapsUrl || '',
       created_at: newPlace.createdAt,
-    });
+    }]);
   } catch (err) {
     console.warn('Supabase addPlace error:', err);
   }
@@ -515,7 +529,7 @@ export async function updatePlace(updatedPlace: Place, currentUserUid?: string):
   saveStoredPlaces(memoryPlaces);
 
   try {
-    await supabase.from('places').upsert({
+    await safeUpsertPlaces([{
       id: placeToSave.placeId,
       name: placeToSave.name,
       category: placeToSave.category,
@@ -532,7 +546,7 @@ export async function updatePlace(updatedPlace: Place, currentUserUid?: string):
       owner_id: ownerId && isValidUUID(ownerId) ? ownerId : null,
       google_maps_url: placeToSave.googleMapsUrl || '',
       created_at: placeToSave.createdAt,
-    });
+    }]);
   } catch (err) {
     console.warn('Supabase updatePlace error:', err);
   }
