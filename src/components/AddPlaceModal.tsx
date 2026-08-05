@@ -237,7 +237,7 @@ export const AddPlaceModal: React.FC<AddPlaceModalProps> = ({
       location: coords,
       googleMapsUrl: finalMapsUrl,
       addedBy: currentUser?.username || currentUser?.uid || 'Thành viên cộng đồng',
-    });
+    }, currentUser?.uid);
 
     onPlaceAdded(newPlace);
     onClose();

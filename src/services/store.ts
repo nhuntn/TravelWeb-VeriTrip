@@ -87,6 +87,7 @@ function mapRowToPlace(row: any): Place {
   const imageUrl = row.image || row.imageUrl || row.image_url || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80';
   return {
     placeId: row.id || row.placeId,
+    ownerId: row.owner_id || row.ownerId,
     name: row.name,
     category: row.category || 'Địa điểm du lịch',
     address: row.address || '',
@@ -97,7 +98,8 @@ function mapRowToPlace(row: any): Place {
     averageRating: Number(row.average_rating ?? row.averageRating ?? 5.0),
     reviewCount: Number(row.review_count ?? row.reviewCount ?? 0),
     trustScore: Number(row.trust_score ?? row.trustScore ?? 100),
-    addedBy: row.added_by || row.addedBy || 'Thành viên cộng đồng',
+    addedBy: row.added_by_name || row.addedBy || 'Thành viên cộng đồng',
+    addedByUid: row.added_by || row.addedByUid || null,
     googleMapsUrl: row.google_maps_url || row.googleMapsUrl || '',
     createdAt: row.created_at || row.createdAt || new Date().toISOString(),
   };
@@ -298,9 +300,16 @@ export async function registerUser(data: {
 export async function updateUser(updatedUser: User): Promise<void> {
   // Sanitize via server endpoint to prevent privilege escalation
   try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const res = await fetch('/api/users/update-profile', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         uid: updatedUser.uid,
         email: updatedUser.email,
@@ -364,7 +373,9 @@ export async function syncAllPlacesToSupabase(placesToSync?: Place[]): Promise<v
     average_rating: p.averageRating,
     review_count: p.reviewCount,
     trust_score: p.trustScore,
-    added_by: p.addedBy || 'Thành viên cộng đồng',
+    added_by: p.addedByUid && isValidUUID(p.addedByUid) ? p.addedByUid : null,
+    added_by_name: p.addedBy || 'Thành viên cộng đồng',
+    owner_id: p.ownerId && isValidUUID(p.ownerId) ? p.ownerId : (isValidUUID(currentSessionUserId || '') ? currentSessionUserId : null),
     google_maps_url: p.googleMapsUrl || '',
     created_at: p.createdAt || new Date().toISOString(),
   }));
@@ -433,9 +444,17 @@ export async function getPlaces(): Promise<Place[]> {
 }
 
 export async function addPlace(
-  newPlaceData: Omit<Place, 'placeId' | 'reviewCount' | 'createdAt' | 'trustScore' | 'averageRating'>
+  newPlaceData: Omit<Place, 'placeId' | 'reviewCount' | 'createdAt' | 'trustScore' | 'averageRating'>,
+  currentUserUid?: string
 ): Promise<Place> {
+  const currentUser = await getCurrentUser();
+  const effectiveUid = (currentUserUid && isValidUUID(currentUserUid))
+    ? currentUserUid
+    : (currentUser?.uid && isValidUUID(currentUser.uid) ? currentUser.uid : null);
+
   const placeId = 'place_' + Date.now();
+  const addedByName = newPlaceData.addedBy || currentUser?.username || 'Thành viên cộng đồng';
+
   const newPlace: Place = {
     ...newPlaceData,
     placeId,
@@ -443,6 +462,9 @@ export async function addPlace(
     reviewCount: 0,
     createdAt: new Date().toISOString(),
     trustScore: 100,
+    addedBy: addedByName,
+    addedByUid: effectiveUid || newPlaceData.addedByUid || null,
+    ownerId: newPlaceData.ownerId || (effectiveUid || undefined),
   };
 
   memoryPlaces.unshift(newPlace);
@@ -461,7 +483,9 @@ export async function addPlace(
       average_rating: newPlace.averageRating,
       review_count: newPlace.reviewCount,
       trust_score: newPlace.trustScore,
-      added_by: newPlace.addedBy,
+      added_by: effectiveUid,
+      added_by_name: addedByName,
+      owner_id: effectiveUid,
       google_maps_url: newPlace.googleMapsUrl || '',
       created_at: newPlace.createdAt,
     });
@@ -472,37 +496,48 @@ export async function addPlace(
   return newPlace;
 }
 
-export async function updatePlace(updatedPlace: Place): Promise<Place> {
-  const index = memoryPlaces.findIndex((p) => p.placeId === updatedPlace.placeId);
+export async function updatePlace(updatedPlace: Place, currentUserUid?: string): Promise<Place> {
+  const currentUser = await getCurrentUser();
+  const effectiveUid = (currentUserUid && isValidUUID(currentUserUid))
+    ? currentUserUid
+    : (currentUser?.uid && isValidUUID(currentUser.uid) ? currentUser.uid : null);
+
+  const addedByUid = updatedPlace.addedByUid || effectiveUid;
+  const ownerId = updatedPlace.ownerId || (effectiveUid || undefined);
+  const placeToSave: Place = { ...updatedPlace, ownerId, addedByUid };
+
+  const index = memoryPlaces.findIndex((p) => p.placeId === placeToSave.placeId);
   if (index !== -1) {
-    memoryPlaces[index] = { ...memoryPlaces[index], ...updatedPlace };
+    memoryPlaces[index] = { ...memoryPlaces[index], ...placeToSave };
   } else {
-    memoryPlaces.unshift(updatedPlace);
+    memoryPlaces.unshift(placeToSave);
   }
   saveStoredPlaces(memoryPlaces);
 
   try {
     await supabase.from('places').upsert({
-      id: updatedPlace.placeId,
-      name: updatedPlace.name,
-      category: updatedPlace.category,
-      address: updatedPlace.address,
-      description: updatedPlace.description || '',
-      phone: updatedPlace.phone || '',
-      image: updatedPlace.imageUrl,
-      location: typeof updatedPlace.location === 'object' ? JSON.stringify(updatedPlace.location) : updatedPlace.location,
-      average_rating: updatedPlace.averageRating,
-      review_count: updatedPlace.reviewCount,
-      trust_score: updatedPlace.trustScore,
-      added_by: updatedPlace.addedBy || 'Thành viên cộng đồng',
-      google_maps_url: updatedPlace.googleMapsUrl || '',
-      created_at: updatedPlace.createdAt,
+      id: placeToSave.placeId,
+      name: placeToSave.name,
+      category: placeToSave.category,
+      address: placeToSave.address,
+      description: placeToSave.description || '',
+      phone: placeToSave.phone || '',
+      image: placeToSave.imageUrl,
+      location: typeof placeToSave.location === 'object' ? JSON.stringify(placeToSave.location) : placeToSave.location,
+      average_rating: placeToSave.averageRating,
+      review_count: placeToSave.reviewCount,
+      trust_score: placeToSave.trustScore,
+      added_by: addedByUid && isValidUUID(addedByUid) ? addedByUid : null,
+      added_by_name: placeToSave.addedBy || 'Thành viên cộng đồng',
+      owner_id: ownerId && isValidUUID(ownerId) ? ownerId : null,
+      google_maps_url: placeToSave.googleMapsUrl || '',
+      created_at: placeToSave.createdAt,
     });
   } catch (err) {
     console.warn('Supabase updatePlace error:', err);
   }
 
-  return updatedPlace;
+  return placeToSave;
 }
 
 // -------------------------------------------------------------

@@ -16,6 +16,7 @@ export interface LocationCoordinates {
 
 export interface Place {
   placeId: string;
+  ownerId?: string;
   name: string;
   category: string;
   location: LocationCoordinates;
@@ -23,6 +24,7 @@ export interface Place {
   averageRating: number;
   reviewCount: number;
   addedBy: string;
+  addedByUid?: string | null;
   imageUrl: string;
   description: string;
   phone?: string;

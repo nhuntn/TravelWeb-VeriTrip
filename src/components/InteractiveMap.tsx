@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Place, LocationCoordinates } from '../types';
+import { Place, LocationCoordinates, User } from '../types';
 import { Navigation2, MapPin, Star, AlertTriangle, ShieldCheck, Search, Loader2, Plus, CheckCircle } from 'lucide-react';
 import { addPlace } from '../services/store';
 
@@ -10,6 +10,7 @@ interface InteractiveMapProps {
   selectedPlace: Place | null;
   onSelectPlace: (place: Place) => void;
   userLocation: LocationCoordinates | null;
+  currentUser?: User | null;
   onSelectLocationForNewPlace?: (coords: LocationCoordinates) => void;
   isPickingLocation?: boolean;
   onPlaceAdded?: (newPlace: Place) => void;
@@ -20,6 +21,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
   selectedPlace,
   onSelectPlace,
   userLocation,
+  currentUser,
   onSelectLocationForNewPlace,
   isPickingLocation = false,
   onPlaceAdded,
@@ -107,7 +109,7 @@ export const InteractiveMap: React.FC<InteractiveMapProps> = ({
       imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&auto=format&fit=crop&q=80',
       location: { lat, lng },
       addedBy: 'OpenStreetMap Sync',
-    });
+    }, currentUser?.uid);
 
     setImportedPlaces((prev) => [...prev, item.place_id.toString()]);
     if (onPlaceAdded) onPlaceAdded(newPlace);

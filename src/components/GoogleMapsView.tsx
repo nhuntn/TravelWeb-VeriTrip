@@ -9,7 +9,7 @@ import {
   useMapsLibrary,
   useAdvancedMarkerRef,
 } from '@vis.gl/react-google-maps';
-import { Place, LocationCoordinates } from '../types';
+import { Place, LocationCoordinates, User } from '../types';
 import { addPlace } from '../services/store';
 import {
   Search,
@@ -33,6 +33,7 @@ interface GoogleMapsViewProps {
   selectedPlace: Place | null;
   onSelectPlace: (place: Place) => void;
   userLocation: LocationCoordinates | null;
+  currentUser?: User | null;
   onPlaceAdded?: (newPlace: Place) => void;
 }
 
@@ -47,8 +48,10 @@ const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY';
 // Inner component for Google Places Search Bar
 function PlacesSearchBar({
   onImportPlace,
+  currentUserUid,
 }: {
   onImportPlace: (placeData: any) => void;
+  currentUserUid?: string;
 }) {
   const placesLib = useMapsLibrary('places');
   const map = useMap();
@@ -115,7 +118,7 @@ function PlacesSearchBar({
       imageUrl,
       location: { lat, lng },
       addedBy: 'Google Maps API Sync',
-    });
+    }, currentUserUid);
 
     setImportedIds((prev) => [...prev, googlePlace.id || newPlace.placeId]);
     onImportPlace(newPlace);
@@ -262,6 +265,7 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
   selectedPlace,
   onSelectPlace,
   userLocation,
+  currentUser,
   onPlaceAdded,
 }) => {
   const center = userLocation
@@ -322,6 +326,7 @@ export const GoogleMapsView: React.FC<GoogleMapsViewProps> = ({
       <APIProvider apiKey={API_KEY} version="weekly">
         {/* Google Places Live Search Bar */}
         <PlacesSearchBar
+          currentUserUid={currentUser?.uid}
           onImportPlace={(p) => {
             if (onPlaceAdded) onPlaceAdded(p);
           }}

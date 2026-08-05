@@ -279,6 +279,7 @@ export default function App() {
                     selectedPlace={selectedPlace}
                     onSelectPlace={(p) => setSelectedPlace(p)}
                     userLocation={userLocation}
+                    currentUser={currentUser}
                     onPlaceAdded={() => reloadStoreData()}
                   />
                 ) : (
@@ -287,6 +288,7 @@ export default function App() {
                     selectedPlace={selectedPlace}
                     onSelectPlace={(p) => setSelectedPlace(p)}
                     userLocation={userLocation}
+                    currentUser={currentUser}
                     onPlaceAdded={() => reloadStoreData()}
                   />
                 )}
@@ -426,10 +428,6 @@ export default function App() {
         <AuthModal
           onClose={() => setIsAuthModalOpen(false)}
           onLoginSuccess={handleLoginSuccess}
-          onQuickSwitchUser={(uid) => {
-            handleSwitchUser(uid);
-            setIsAuthModalOpen(false);
-          }}
         />
       )}
 

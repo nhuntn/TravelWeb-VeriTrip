@@ -47,12 +47,12 @@ const aiRateLimiter = (req: express.Request, res: express.Response, next: expres
   rateLimitMap.set(clientIp, record);
 
   if (record.count > maxRequests) {
-    return res.status(429).json({ error: 'Bạn đã gửi quá nhiều yêu cầu AI. Vui lòng chờ 1 phút trước khi thử lại.' });
+    return res.status(429).json({ error: 'Bạn đã gửi quá nhiều yêu cầu API. Vui lòng chờ 1 phút trước khi thử lại.' });
   }
   next();
 };
 
-app.use('/api/ai', aiRateLimiter);
+app.use('/api', aiRateLimiter);
 
 // Initialize Gemini Client server-side
 const getGeminiClient = () => {
@@ -292,17 +292,47 @@ Trả về JSON chuẩn.
 });
 
 // API Endpoint 3: Secure Profile Update (Prevents Role/Strike/Ban Privilege Escalation)
-app.post('/api/users/update-profile', (req, res) => {
+app.post('/api/users/update-profile', async (req, res) => {
   try {
-    const { uid, email, username, avatar } = req.body;
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
 
-    if (!uid || !email) {
-      return res.status(400).json({ error: 'Thiếu thông tin người dùng hợp lệ' });
+    if (!token) {
+      return res.status(401).json({ error: 'Yêu cầu token xác thực người dùng (Bearer token)' });
     }
+
+    const supabaseAdmin = getSupabaseAdmin();
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+
+    let authenticatedUid: string | null = null;
+    let userEmail: string = '';
+
+    if (supabaseAdmin) {
+      const { data: authData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+      if (!authErr && authData?.user) {
+        authenticatedUid = authData.user.id;
+        userEmail = authData.user.email || '';
+      }
+    } else if (supabaseUrl && anonKey) {
+      const anonClient = createClient(supabaseUrl, anonKey, { auth: { persistSession: false } });
+      const { data: authData, error: authErr } = await anonClient.auth.getUser(token);
+      if (!authErr && authData?.user) {
+        authenticatedUid = authData.user.id;
+        userEmail = authData.user.email || '';
+      }
+    }
+
+    if (!authenticatedUid) {
+      return res.status(401).json({ error: 'Xác thực token người dùng không thành công' });
+    }
+
+    const { username, avatar } = req.body;
+    const email = req.body.email || userEmail;
 
     // Return sanitized object stripped of role, strikes, is_banned, ban_until
     const sanitizedProfile = {
-      uid,
+      uid: authenticatedUid,
       email,
       username: typeof username === 'string' ? username.trim() : email.split('@')[0],
       avatar: typeof avatar === 'string' ? avatar : `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
@@ -313,7 +343,7 @@ app.post('/api/users/update-profile', (req, res) => {
       profile: sanitizedProfile,
     });
   } catch (err: any) {
-    return res.status(500).json({ error: 'Lỗi cập nhật hồ sơ', details: err.message });
+    return res.status(500).json({ error: 'Lỗi cập nhật hồ sơ' });
   }
 });
 

@@ -95,6 +95,8 @@ DROP POLICY IF EXISTS "Owner or admin can delete place" ON public.places;
 CREATE POLICY "Owner or admin can delete place" ON public.places
   FOR DELETE USING (
     owner_id = auth.uid() OR
+    added_by = (SELECT email FROM public.users WHERE id = auth.uid()) OR
+    added_by = (SELECT username FROM public.users WHERE id = auth.uid()) OR
     (SELECT role FROM public.users WHERE id = auth.uid()) = 'admin'
   );
 

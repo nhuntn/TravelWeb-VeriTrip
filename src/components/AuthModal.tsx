@@ -21,7 +21,6 @@ import {
 interface AuthModalProps {
   onClose: () => void;
   onLoginSuccess: (user: User) => void;
-  onQuickSwitchUser: (uid: string) => void;
 }
 
 const AVATAR_PRESETS = [
@@ -35,7 +34,6 @@ const AVATAR_PRESETS = [
 export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   onLoginSuccess,
-  onQuickSwitchUser,
 }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
