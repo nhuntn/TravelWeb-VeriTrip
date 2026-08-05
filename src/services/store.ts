@@ -728,10 +728,10 @@ export async function submitReviewWithAI(
         currentUser.isBanned = penalty.isBanned;
         currentUser.banUntil = penalty.banUntil;
       } else {
-        currentUser.strikes += 1;
+        console.warn('Yêu cầu xử lý vi phạm thất bại từ máy chủ:', strikeRes.statusText);
       }
     } catch (e) {
-      currentUser.strikes += 1;
+      console.warn('Không thể ghi nhận vi phạm do lỗi kết nối:', e);
     }
 
     if (currentUser.strikes > 5 && !currentUser.isBanned) {
