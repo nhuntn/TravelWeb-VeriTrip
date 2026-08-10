@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Place, Review, User, LocationCoordinates } from './types';
+import { supabase } from './services/supabaseClient';
 import {
   getPlaces,
   getReviews,
@@ -57,6 +58,19 @@ export default function App() {
   useEffect(() => {
     reloadStoreData();
     requestBrowserGeolocation();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        const user = await getCurrentUser();
+        setCurrentUser(user);
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   const reloadStoreData = async () => {

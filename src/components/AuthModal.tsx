@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { loginUser, registerUser } from '../services/store';
+import { supabase } from '../services/supabaseClient';
 import {
   X,
   LogIn,
@@ -108,12 +109,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleGoogleLogin = async () => {
     setError(null);
     try {
-      const user = await loginUser('nhuntn1112@gmail.com', '123456');
-      setSuccessMsg('Đăng nhập Google thành công! Tải thông tin tài khoản Google...');
-      setTimeout(() => {
-        onLoginSuccess(user);
-        onClose();
-      }, 600);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (error) throw error;
     } catch (err: any) {
       setError(err.message || 'Lỗi kết nối Google Auth.');
     }

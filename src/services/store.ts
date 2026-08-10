@@ -161,6 +161,21 @@ export async function getCurrentUser(): Promise<User | null> {
         await updateUser(user);
       }
       return user;
+    } else if (session?.user) {
+      const email = session.user.email || '';
+      const rawUsername = email.split('@')[0] || 'User';
+      const user: User = {
+        uid: session.user.id,
+        email,
+        username: session.user.user_metadata?.username || (rawUsername.charAt(0).toUpperCase() + rawUsername.slice(1)),
+        avatar: session.user.user_metadata?.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(rawUsername)}`,
+        strikes: 0,
+        isBanned: false,
+        banUntil: null,
+        role: 'user',
+      };
+      await updateUser(user);
+      return user;
     }
   } catch (err) {
     console.warn('Supabase getCurrentUser notice:', err);
@@ -199,7 +214,10 @@ export async function loginUser(email: string, password?: string): Promise<User>
     });
 
     if (error) {
-      throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin hoặc đăng ký tài khoản mới.');
+      if (error.message?.toLowerCase().includes('invalid login credentials')) {
+        throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.');
+      }
+      throw new Error(error.message || 'Lỗi đăng nhập qua Supabase Auth.');
     }
     supabaseAuthUser = data.user;
   } catch (err: any) {
@@ -267,14 +285,19 @@ export async function registerUser(data: {
     });
 
     if (error) {
+      if (error.message?.toLowerCase().includes('already registered')) {
+        throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
+      }
       throw new Error(error.message || 'Lỗi khi đăng ký với Supabase Auth.');
     }
 
     if (authData.user) {
+      if (authData.user.identities && authData.user.identities.length === 0) {
+        throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
+      }
       uid = authData.user.id;
     }
   } catch (err: any) {
-    console.warn('Supabase auth signUp notice:', err);
     throw new Error(err.message || 'Không thể đăng ký tài khoản qua Supabase Auth.');
   }
 
