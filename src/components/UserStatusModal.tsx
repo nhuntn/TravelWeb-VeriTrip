@@ -7,7 +7,6 @@ import {
   AlertOctagon,
   LogOut,
   LogIn,
-  RefreshCw,
   User as UserIcon,
   Mail,
   Lock,
@@ -32,7 +31,7 @@ interface UserStatusModalProps {
   reviews: Review[];
   onClose: () => void;
   onSwitchUser: (uid: string) => void;
-  onResetData: () => void;
+  onResetData?: () => void;
   onLogout?: () => void;
   onOpenAuth?: () => void;
   onUpdateUser?: () => void;
@@ -57,14 +56,14 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
   const [username, setUsername] = useState(user.username);
   const [email, setEmail] = useState(user.email);
   const [avatar, setAvatar] = useState(
-    user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'
+    user.avatar || 'https://i.pinimg.com/1200x/92/b2/49/92b24967cf34c2f5b82ca1ec6268fad4.jpg'
   );
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  const defaultAvatar = user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
+  const defaultAvatar = user.avatar || 'https://i.pinimg.com/1200x/92/b2/49/92b24967cf34c2f5b82ca1ec6268fad4.jpg';
   const isFormChanged =
     username.trim() !== user.username ||
     email.trim() !== user.email ||
@@ -91,11 +90,11 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
   const isBanned = user.isBanned || strikes > 5;
 
   const AVATAR_PRESETS = [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    'https://i.pinimg.com/1200x/e2/57/0c/e2570c24e30a75572480265c7a7bc3be.jpg?w=150&auto=format&fit=crop&q=80',
+    'https://i.pinimg.com/736x/a2/9c/41/a29c4184fb8820a58d7817cba78a87e0.jpg?w=150&auto=format&fit=crop&q=80',
+    'https://i.pinimg.com/736x/2a/01/58/2a015800ecc2d56a4ba7fb0cb8ed82bc.jpg?w=150&auto=format&fit=crop&q=80',
+    'https://i.pinimg.com/1200x/cf/f5/fe/cff5fe9cfa6af8f99f9f6d0a687faa39.jpg?w=150&auto=format&fit=crop&q=80',
+    'https://i.pinimg.com/736x/d8/f2/96/d8f2968395e38f3cda4aac38ac55a467.jpg?w=150&auto=format&fit=crop&q=80',
   ];
 
   // Stop camera stream on unmount or tab switch
@@ -282,7 +281,7 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
             }`}
           >
             <Shield className="w-3.5 h-3.5 shrink-0" />
-            <span>Độ uy tín & Cảnh báo ({strikes}/5)</span>
+            <span>Cảnh báo ({strikes}/5)</span>
             {strikes > 0 && (
               <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white animate-pulse shrink-0">
                 Cảnh báo!
@@ -340,7 +339,7 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
                       className="w-16 h-16 rounded-2xl object-cover border-2 border-orange-500 shadow-md"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src =
-                          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100';
+                          'https://i.pinimg.com/1200x/92/b2/49/92b24967cf34c2f5b82ca1ec6268fad4.jpg?w=100';
                       }}
                     />
                     <button
@@ -795,17 +794,6 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
           ) : <div />}
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                onResetData();
-                onClose();
-              }}
-              className="p-2 text-gray-400 hover:text-rose-600 text-xs flex items-center gap-1 transition"
-              title="Reset dữ liệu thử nghiệm"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-
             <button
               onClick={onClose}
               className="px-4 py-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-bold text-xs rounded-xl transition"
