@@ -432,9 +432,6 @@ export async function syncAllPlacesToSupabase(placesToSync?: Place[]): Promise<v
 export async function getPlaces(): Promise<Place[]> {
   let places: Place[] = memoryPlaces;
 
-  // Make sure initial places and local memory places are synced to Supabase
-  syncAllPlacesToSupabase(memoryPlaces).catch(() => {});
-
   try {
     const { data, error } = await supabase.from('places').select('*');
     if (!error && data && data.length > 0) {
@@ -445,9 +442,13 @@ export async function getPlaces(): Promise<Place[]> {
       places = Array.from(placeMap.values());
       memoryPlaces = places;
       saveStoredPlaces(places);
-    } else {
-      // If Supabase table is empty or error, push initial places into Supabase
+    } else if (!error && (!data || data.length === 0)) {
+      // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng,
+      // không seed khi có lỗi (mất mạng, RLS chặn...)
       await syncAllPlacesToSupabase(INITIAL_PLACES);
+      places = INITIAL_PLACES;
+      memoryPlaces = places;
+      saveStoredPlaces(places);
     }
   } catch (err) {
     console.warn('Error fetching places directly from Supabase:', err);
@@ -613,9 +614,6 @@ export async function syncAllReviewsToSupabase(reviewsToSync?: Review[]): Promis
 export async function getReviews(placeId?: string): Promise<Review[]> {
   let reviews: Review[] = memoryReviews;
 
-  // Make sure local reviews are synced to Supabase in background
-  syncAllReviewsToSupabase(memoryReviews).catch(() => {});
-
   try {
     const { data, error } = await supabase.from('reviews').select('*');
     if (!error && data && data.length > 0) {
@@ -626,8 +624,13 @@ export async function getReviews(placeId?: string): Promise<Review[]> {
       reviews = Array.from(reviewMap.values());
       memoryReviews = reviews;
       saveStoredReviews(reviews);
-    } else {
+    } else if (!error && (!data || data.length === 0)) {
+      // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng,
+      // không seed khi có lỗi (mất mạng, RLS chặn...)
       await syncAllReviewsToSupabase(INITIAL_REVIEWS);
+      reviews = INITIAL_REVIEWS;
+      memoryReviews = reviews;
+      saveStoredReviews(reviews);
     }
   } catch (err) {
     console.warn('Error fetching reviews directly from Supabase:', err);
