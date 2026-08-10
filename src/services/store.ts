@@ -2,8 +2,24 @@ import { supabase } from './supabaseClient';
 import { INITIAL_PLACES, INITIAL_REVIEWS, INITIAL_USERS } from '../data/initialData';
 import { AIAnalysisResult, Place, Review, User } from '../types';
 
-const STORAGE_PLACES_KEY = 'veritrip_places_v3';
-const STORAGE_REVIEWS_KEY = 'veritrip_reviews_v3';
+const STORAGE_PLACES_KEY = 'veritrip_places_v4';
+const STORAGE_REVIEWS_KEY = 'veritrip_reviews_v4';
+const LEGACY_KEYS = [
+  'veritrip_places_v3',
+  'veritrip_reviews_v3',
+  'veritrip_places_v2',
+  'veritrip_reviews_v2',
+  'veritrip_places',
+   'veritrip_reviews',
+];
+function clearLegacyLocalStorage(): void {
+ try {
+    LEGACY_KEYS.forEach((key) => localStorage.removeItem(key));
+  } catch (e) {
+    console.warn('Error clearing legacy localStorage keys', e);
+  }
+}
+clearLegacyLocalStorage();
 
 function getStoredPlaces(): Place[] {
   try {
