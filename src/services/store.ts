@@ -451,16 +451,10 @@ export async function getPlaces(): Promise<Place[]> {
   try {
     const { data, error } = await supabase.from('places').select('*');
     if (!error && data && data.length > 0) {
-      const dbPlaces = data.map(mapRowToPlace);
-      const placeMap = new Map<string, Place>();
-      memoryPlaces.forEach((p) => placeMap.set(p.placeId, p));
-      dbPlaces.forEach((p) => placeMap.set(p.placeId, p));
-      places = Array.from(placeMap.values());
+      places = data.map(mapRowToPlace);
       memoryPlaces = places;
       saveStoredPlaces(places);
     } else if (!error && (!data || data.length === 0)) {
-      // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng,
-      // không seed khi có lỗi (mất mạng, RLS chặn...)
       await syncAllPlacesToSupabase(INITIAL_PLACES);
       places = INITIAL_PLACES;
       memoryPlaces = places;
@@ -633,11 +627,7 @@ export async function getReviews(placeId?: string): Promise<Review[]> {
   try {
     const { data, error } = await supabase.from('reviews').select('*');
     if (!error && data && data.length > 0) {
-      const dbReviews = data.map(mapRowToReview);
-      const reviewMap = new Map<string, Review>();
-      memoryReviews.forEach((r) => reviewMap.set(r.reviewId, r));
-      dbReviews.forEach((r) => reviewMap.set(r.reviewId, r));
-      reviews = Array.from(reviewMap.values());
+      reviews = data.map(mapRowToReview);
       memoryReviews = reviews;
       saveStoredReviews(reviews);
     } else if (!error && (!data || data.length === 0)) {
