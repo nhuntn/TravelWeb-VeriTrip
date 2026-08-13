@@ -122,12 +122,14 @@ function mapRowToPlace(row: any): Place {
 }
 
 function mapRowToReview(row: any): Review {
+  const uid = row.user_id || row.userId;
+  const linkedUser = row.users || row.user || null;
   return {
     reviewId: row.id || row.reviewId,
     placeId: row.place_id || row.placeId,
-    userId: row.user_id || row.userId,
-    userName: row.user_name || row.userName,
-    userAvatar: row.user_avatar || row.userAvatar,
+    userId: uid,
+    userName: linkedUser?.username || row.user_name || row.userName || 'Người dùng ẩn danh',
+    userAvatar: linkedUser?.avatar || row.user_avatar || row.userAvatar,
     rating: Number(row.rating),
     content: row.content,
     createdAt: row.created_at || row.createdAt || new Date().toISOString(),
@@ -500,7 +502,7 @@ export async function addPlace(
     ? currentUserUid
     : (currentUser?.uid && isValidUUID(currentUser.uid) ? currentUser.uid : null);
 
-  const placeId = 'place_' + Date.now();
+  const placeId = 'place_' + crypto.randomUUID();
   const addedByName = newPlaceData.addedBy || currentUser?.username || 'Thành viên cộng đồng';
 
   const newPlace: Place = {
@@ -625,7 +627,9 @@ export async function getReviews(placeId?: string): Promise<Review[]> {
   let reviews: Review[] = memoryReviews;
 
   try {
-    const { data, error } = await supabase.from('reviews').select('*');
+    const { data, error } = await supabase
+      .from('reviews')
+      .select('*, users:user_id(username, avatar)');
     if (!error && data && data.length > 0) {
       reviews = data.map(mapRowToReview);
       memoryReviews = reviews;
@@ -671,18 +675,63 @@ export async function submitReviewWithAI(
     );
   }
 
-  // 1. Call AI Anti-Seeding API
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  let review: Review;
   let aiAnalysis: AIAnalysisResult;
+  let userStatusUpdated: User | null = null;
+
   try {
-    const res = await fetch('/api/ai/analyze-review', {
+    const res = await fetch('/api/reviews/submit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reviewContent: content, placeName, rating }),
+      headers,
+      body: JSON.stringify({
+        placeId,
+        placeName,
+        rating,
+        content,
+        userId: currentUser.uid,
+        userName: currentUser.username,
+        userAvatar: currentUser.avatar,
+      }),
     });
-    if (!res.ok) throw new Error('Không thể kết nối đến AI Trọng tài.');
-    aiAnalysis = await res.json();
+
+    if (res.ok) {
+      const data = await res.json();
+      aiAnalysis = data.aiAnalysis;
+      review = {
+        reviewId: data.review.id,
+        placeId: data.review.place_id,
+        userId: data.review.user_id,
+        userName: data.review.user_name,
+        userAvatar: data.review.user_avatar,
+        rating: data.review.rating,
+        content: data.review.content,
+        createdAt: data.review.created_at,
+        isSeeding: data.review.is_seeding,
+        seedingReason: data.review.seeding_reason,
+        confidenceScore: data.review.confidence_score,
+        detectedKeywords: data.review.detected_keywords,
+      };
+
+      if (data.userPenalty) {
+        currentUser.strikes = data.userPenalty.strikes;
+        currentUser.isBanned = data.userPenalty.isBanned;
+        currentUser.banUntil = data.userPenalty.banUntil;
+        userStatusUpdated = currentUser;
+      }
+    } else {
+      const errJson = await res.json().catch(() => ({}));
+      throw new Error(errJson.error || 'Lỗi gửi đánh giá lên máy chủ');
+    }
   } catch (err: any) {
-    console.warn('Falling back to local AI analysis:', err);
+    console.warn('Falling back to local AI review submission:', err);
     const isSeeding = /0\d{9}|hotline|inbox|giảm giá|quảng cáo|liên hệ|dịch vụ uy tín/i.test(content);
     aiAnalysis = {
       isSeeding,
@@ -693,96 +742,48 @@ export async function submitReviewWithAI(
       detectedKeywords: isSeeding ? ['quảng cáo'] : [],
       recommendedAction: isSeeding ? 'FLAGGED_WARNING' : 'APPROVED',
     };
-  }
 
-  // 2. Create review object & save locally + to Supabase
-  const reviewId = 'rev_' + Date.now();
-  const newReview: Review = {
-    reviewId,
-    placeId,
-    userId: currentUser.uid,
-    userName: currentUser.username,
-    userAvatar: currentUser.avatar,
-    rating,
-    content,
-    createdAt: new Date().toISOString(),
-    isSeeding: aiAnalysis.isSeeding,
-    seedingReason: aiAnalysis.seedingReason,
-    confidenceScore: aiAnalysis.confidenceScore,
-    detectedKeywords: aiAnalysis.detectedKeywords,
-  };
-
-  memoryReviews.unshift(newReview);
-  saveStoredReviews(memoryReviews);
-
-  try {
-    await supabase.from('reviews').upsert({
-      id: reviewId,
-      place_id: placeId,
-      user_id: isValidUUID(currentUser.uid) ? currentUser.uid : null,
-      user_name: currentUser.username,
-      user_avatar: currentUser.avatar,
+    const reviewId = 'rev_' + crypto.randomUUID();
+    review = {
+      reviewId,
+      placeId,
+      userId: currentUser.uid,
+      userName: currentUser.username,
+      userAvatar: currentUser.avatar,
       rating,
       content,
-      is_seeding: aiAnalysis.isSeeding,
-      seeding_reason: aiAnalysis.seedingReason,
-      confidence_score: aiAnalysis.confidenceScore,
-      detected_keywords: aiAnalysis.detectedKeywords,
-      created_at: newReview.createdAt,
-    });
-  } catch (err) {
-    console.warn('Supabase submitReview error:', err);
-  }
+      createdAt: new Date().toISOString(),
+      isSeeding: aiAnalysis.isSeeding,
+      seedingReason: aiAnalysis.seedingReason,
+      confidenceScore: aiAnalysis.confidenceScore,
+      detectedKeywords: aiAnalysis.detectedKeywords,
+    };
 
-  // 3. Handle User Strike Penalties if AI flagged Seeding via secure server endpoint
-  let userStatusUpdated: User | null = null;
-  if (aiAnalysis.isSeeding) {
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const strikeRes = await fetch('/api/reviews/process-strike', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          currentStrikes: currentUser.strikes,
-          isSeeding: true,
-        }),
+      await supabase.from('reviews').upsert({
+        id: reviewId,
+        place_id: placeId,
+        user_id: isValidUUID(currentUser.uid) ? currentUser.uid : null,
+        user_name: currentUser.username,
+        user_avatar: currentUser.avatar,
+        rating,
+        content,
+        is_seeding: aiAnalysis.isSeeding,
+        seeding_reason: aiAnalysis.seedingReason,
+        confidence_score: aiAnalysis.confidenceScore,
+        detected_keywords: aiAnalysis.detectedKeywords,
+        created_at: review.createdAt,
       });
-      if (strikeRes.ok) {
-        const penalty = await strikeRes.json();
-        currentUser.strikes = penalty.strikes;
-        currentUser.isBanned = penalty.isBanned;
-        currentUser.banUntil = penalty.banUntil;
-      } else {
-        console.warn('Yêu cầu xử lý vi phạm thất bại từ máy chủ:', strikeRes.statusText);
-      }
-    } catch (e) {
-      console.warn('Không thể ghi nhận vi phạm do lỗi kết nối:', e);
+    } catch (sErr) {
+      console.warn('Supabase fallback submitReview error:', sErr);
     }
-
-    if (currentUser.strikes > 5 && !currentUser.isBanned) {
-      const banDate = new Date();
-      banDate.setDate(banDate.getDate() + 180);
-      currentUser.isBanned = true;
-      currentUser.banUntil = banDate.toISOString();
-    }
-    
-    // Update local memory user cache
-    const idx = memoryUsers.findIndex((u) => u.uid === currentUser.uid);
-    if (idx !== -1) {
-      memoryUsers[idx] = { ...currentUser };
-    }
-    userStatusUpdated = currentUser;
   }
+
+  memoryReviews.unshift(review);
+  saveStoredReviews(memoryReviews);
 
   return {
-    review: newReview,
+    review,
     aiAnalysis,
     userStatusUpdated,
   };

@@ -23,10 +23,15 @@ DROP POLICY IF EXISTS "Public users view policy" ON public.users;
 CREATE POLICY "Public users view policy" ON public.users
   FOR SELECT USING (true);
 
--- Insert policy: Handled via trigger or signup
+-- Insert policy: Handled via trigger or signup - restrict role and initial status
 DROP POLICY IF EXISTS "Users can insert own row" ON public.users;
 CREATE POLICY "Users can insert own row" ON public.users
-  FOR INSERT WITH CHECK (auth.uid() = id);
+  FOR INSERT WITH CHECK (
+    auth.uid() = id AND
+    role = 'user' AND
+    strikes = 0 AND
+    is_banned = false
+  );
 
 -- UPDATE policy: PREVENT PRIVILEGE ESCALATION
 -- Users can only update their username/avatar, NOT role, strikes, or is_banned!
@@ -90,8 +95,7 @@ DROP POLICY IF EXISTS "Owner or admin can update place" ON public.places;
 CREATE POLICY "Owner or admin can update place" ON public.places
   FOR UPDATE USING (
     owner_id = auth.uid() OR
-    added_by = (SELECT email FROM public.users WHERE id = auth.uid()) OR
-    added_by = (SELECT username FROM public.users WHERE id = auth.uid()) OR
+    added_by = auth.uid() OR
     (SELECT role FROM public.users WHERE id = auth.uid()) = 'admin'
   );
 
@@ -100,8 +104,7 @@ DROP POLICY IF EXISTS "Owner or admin can delete place" ON public.places;
 CREATE POLICY "Owner or admin can delete place" ON public.places
   FOR DELETE USING (
     owner_id = auth.uid() OR
-    added_by = (SELECT email FROM public.users WHERE id = auth.uid()) OR
-    added_by = (SELECT username FROM public.users WHERE id = auth.uid()) OR
+    added_by = auth.uid() OR
     (SELECT role FROM public.users WHERE id = auth.uid()) = 'admin'
   );
 

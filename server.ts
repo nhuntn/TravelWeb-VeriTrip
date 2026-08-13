@@ -31,6 +31,17 @@ const getSupabaseAdmin = () => {
 
 // Rate limiting for AI endpoints to prevent abuse and API quota exhaustion
 const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+
+// Periodic cleanup to avoid memory leak for stale IP entries
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimitMap.entries()) {
+    if (now > record.resetTime) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+
 const aiRateLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const clientIp = (req.headers['x-forwarded-for'] as string) || req.ip || 'client-ip';
   const now = Date.now();
@@ -436,6 +447,173 @@ app.post('/api/reviews/process-strike', async (req, res) => {
     });
   } catch (err: any) {
     return res.status(500).json({ error: 'Lỗi xử lý vi phạm' });
+  }
+});
+
+// API Endpoint 5: Server-Authoritative Review Submission & Anti-Seeding Verification
+app.post('/api/reviews/submit', async (req, res) => {
+  try {
+    const { placeId, placeName, rating, content, userId, userName, userAvatar } = req.body;
+
+    if (!placeId || !content || typeof content !== 'string') {
+      return res.status(400).json({ error: 'Nội dung đánh giá hoặc mã địa điểm không hợp lệ' });
+    }
+
+    if (content.length > 2000) {
+      return res.status(400).json({ error: 'Nội dung đánh giá không được vượt quá 2000 ký tự' });
+    }
+
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+    const supabaseAdmin = getSupabaseAdmin();
+
+    let authenticatedUid = userId;
+    if (token && supabaseAdmin) {
+      const { data: authData } = await supabaseAdmin.auth.getUser(token);
+      if (authData?.user) {
+        authenticatedUid = authData.user.id;
+      }
+    }
+
+    // Check if user is banned
+    if (authenticatedUid && supabaseAdmin) {
+      const { data: dbUser } = await supabaseAdmin
+        .from('users')
+        .select('is_banned, ban_until')
+        .eq('id', authenticatedUid)
+        .maybeSingle();
+
+      if (dbUser?.is_banned) {
+        return res.status(403).json({ error: 'Tài khoản của bạn đang bị cấm đăng đánh giá do vi phạm quy chuẩn cộng đồng.' });
+      }
+    }
+
+    // 1. Analyze with Gemini AI server-side
+    const ai = getGeminiClient();
+    let aiAnalysis = {
+      isSeeding: false,
+      seedingReason: 'Đánh giá tự nhiên, không phát hiện hành vi seeding.',
+      confidenceScore: 98,
+      detectedKeywords: [] as string[],
+      recommendedAction: 'APPROVED',
+    };
+
+    const isSeedingFallback =
+      /liên hệ ngay|sđt|0\d{9}|inbox ngay|giảm giá 50%|cam kết rẻ nhất|quảng cáo|dịch vụ uy tín nhất|inbox chốt đơn|văn mẫu|đặt bàn qua số|tri ân khách hàng/i.test(content);
+
+    if (isSeedingFallback) {
+      aiAnalysis = {
+        isSeeding: true,
+        seedingReason: 'Cảnh báo AI: Phát hiện dấu hiệu văn mẫu quảng cáo, chèn số điện thoại booking hoặc từ khóa seeding thương mại.',
+        confidenceScore: 95,
+        detectedKeywords: ['quảng cáo', 'seeding', 'số điện thoại'],
+        recommendedAction: 'FLAGGED_WARNING',
+      };
+    } else if (ai) {
+      try {
+        const prompt = `
+Bạn là "AI Trọng Tài Anti-Seeding" cho ứng dụng du lịch TravelWeb.
+Phân tích nội dung đánh giá đối với địa điểm "${placeName || 'Địa điểm'}":
+"${content}"
+
+Trả về JSON với schema: isSeeding (boolean), seedingReason (string), confidenceScore (number 0-100), detectedKeywords (array string), recommendedAction (APPROVED | FLAGGED_WARNING | STRIKE_PENALTY).
+`;
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                isSeeding: { type: Type.BOOLEAN },
+                seedingReason: { type: Type.STRING },
+                confidenceScore: { type: Type.NUMBER },
+                detectedKeywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+                recommendedAction: { type: Type.STRING },
+              },
+              required: ['isSeeding', 'seedingReason', 'confidenceScore', 'detectedKeywords', 'recommendedAction'],
+            },
+          },
+        });
+        const parsed = JSON.parse(response.text || '{}');
+        aiAnalysis = { ...aiAnalysis, ...parsed };
+      } catch (e) {
+        console.warn('Notice calling Gemini in submit review:', e);
+      }
+    }
+
+    const reviewId = 'rev_' + crypto.randomUUID();
+    const newReview = {
+      id: reviewId,
+      place_id: placeId,
+      user_id: authenticatedUid || null,
+      user_name: userName || 'Khách viếng thăm',
+      user_avatar: userAvatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(userName || 'User')}`,
+      rating: Number(rating) || 5,
+      content,
+      is_seeding: aiAnalysis.isSeeding,
+      seeding_reason: aiAnalysis.seedingReason,
+      confidence_score: aiAnalysis.confidenceScore,
+      detected_keywords: aiAnalysis.detectedKeywords,
+      created_at: new Date().toISOString(),
+    };
+
+    let userPenalty = null;
+
+    // 2. If seeding & admin available, process strike server-side
+    if (aiAnalysis.isSeeding && authenticatedUid && supabaseAdmin) {
+      try {
+        const { data: dbUser } = await supabaseAdmin
+          .from('users')
+          .select('strikes, is_banned')
+          .eq('id', authenticatedUid)
+          .maybeSingle();
+
+        const currentStrikes = dbUser?.strikes || 0;
+        const newStrikes = currentStrikes + 1;
+        const isBanned = newStrikes > 5;
+        let banUntil: string | null = null;
+        if (isBanned) {
+          const bDate = new Date();
+          bDate.setDate(bDate.getDate() + 180);
+          banUntil = bDate.toISOString();
+        }
+
+        await supabaseAdmin
+          .from('users')
+          .update({
+            strikes: newStrikes,
+            is_banned: isBanned,
+            ban_until: banUntil,
+          })
+          .eq('id', authenticatedUid);
+
+        userPenalty = {
+          strikes: newStrikes,
+          isBanned,
+          banUntil,
+        };
+      } catch (err) {
+        console.warn('Error applying user penalty server-side:', err);
+      }
+    }
+
+    // 3. Save review to DB via admin if available
+    if (supabaseAdmin) {
+      await supabaseAdmin.from('reviews').upsert([newReview]);
+    }
+
+    return res.json({
+      success: true,
+      review: newReview,
+      aiAnalysis,
+      userPenalty,
+    });
+  } catch (err: any) {
+    console.error('Error submitting review server-side:', err);
+    return res.status(500).json({ error: 'Lỗi gửi đánh giá lên máy chủ' });
   }
 });
 
