@@ -257,8 +257,15 @@ export async function loginUser(email: string, password?: string): Promise<User>
       });
 
       if (error) {
-        if (error.message?.toLowerCase().includes('invalid login credentials')) {
+        const msg = error.message?.toLowerCase() || '';
+        if (msg.includes('invalid login credentials')) {
           throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.');
+        }
+        if (msg.includes('email not confirmed')) {
+          throw new Error('Email chưa được xác nhận. Vui lòng kiểm tra hộp thư email hoặc tắt "Confirm email" trong cài đặt Supabase Auth.');
+        }
+        if (msg.includes('too many requests') || msg.includes('rate limit')) {
+          throw new Error('Bạn đã thử quá nhiều lần. Vui lòng đợi ít phút rồi thử lại.');
         }
         throw new Error(error.message || 'Lỗi đăng nhập qua Supabase Auth.');
       }
@@ -344,8 +351,15 @@ export async function registerUser(data: {
       });
 
       if (error) {
-        if (error.message?.toLowerCase().includes('already registered')) {
+        const msg = error.message?.toLowerCase() || '';
+        if (msg.includes('already registered') || msg.includes('user_already_exists') || msg.includes('already exists')) {
           throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
+        }
+        if (msg.includes('password should be at least')) {
+          throw new Error('Mật khẩu phải chứa ít nhất 6 ký tự.');
+        }
+        if (msg.includes('invalid email')) {
+          throw new Error('Địa chỉ Email không hợp lệ.');
         }
         throw new Error(error.message || 'Lỗi khi đăng ký với Supabase Auth.');
       }

@@ -48,6 +48,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Status
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +64,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const user = await loginUser(email, password);
       setSuccessMsg(`Đăng nhập thành công! Chào mừng ${user.username}`);
@@ -72,6 +74,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }, 600);
     } catch (err: any) {
       setError(err.message || 'Đăng nhập không thành công.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -89,6 +93,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const user = await registerUser({
         username,
@@ -103,6 +108,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }, 700);
     } catch (err: any) {
       setError(err.message || 'Đăng ký thất bại.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -250,10 +257,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md shadow-orange-600/20 transition active:scale-95 flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-orange-600/20 transition active:scale-95 flex items-center justify-center gap-2"
             >
-              <LogIn className="w-4 h-4" />
-              <span>Đăng Nhập Tài Khoản</span>
+              {isSubmitting ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <LogIn className="w-4 h-4" />
+              )}
+              <span>{isSubmitting ? 'Đang Đăng Nhập...' : 'Đăng Nhập Tài Khoản'}</span>
             </button>
           </form>
         )}
@@ -301,7 +313,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <div>
               <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                Mật khẩu (Tùy chọn)
+                Mật khẩu *
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
@@ -309,6 +321,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
                 <input
                   type="password"
+                  required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Tối thiểu 6 ký tự..."
@@ -340,10 +353,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs shadow-md shadow-orange-600/20 transition active:scale-95 flex items-center justify-center gap-2"
+              disabled={isSubmitting}
+              className="w-full py-3 rounded-xl bg-orange-600 hover:bg-orange-700 disabled:opacity-60 text-white font-bold text-xs shadow-md shadow-orange-600/20 transition active:scale-95 flex items-center justify-center gap-2"
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Tạo Tài Khoản Mới</span>
+              {isSubmitting ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <UserPlus className="w-4 h-4" />
+              )}
+              <span>{isSubmitting ? 'Đang Tạo Tài Khoản...' : 'Tạo Tài Khoản Mới'}</span>
             </button>
           </form>
         )}
