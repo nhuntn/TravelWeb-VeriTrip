@@ -197,67 +197,6 @@ export default function App() {
         onRequestLocation={requestBrowserGeolocation}
       />
 
-      {/* City Switcher Banner */}
-      <div className="bg-orange-600 dark:bg-orange-950 text-white py-1 px-3 border-b border-orange-500/30 text-xs leading-tight">
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap sm:flex-nowrap gap-2">
-          <div className="flex items-center gap-2 shrink-0 font-medium">
-            <div className="flex items-center gap-1 font-bold text-amber-200">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
-              <span>AI Anti-Seeding</span>
-            </div>
-            <span
-              className="inline-flex items-center gap-1.5 text-[11px] bg-rose-950/90 text-rose-100 border border-rose-400/50 px-2.5 py-0.5 rounded-full font-extrabold shadow-xs select-none"
-            >
-              <ShieldAlert className="w-3.5 h-3.5 text-rose-300 shrink-0" />
-              <span>Thước đo vi phạm: <strong className="text-amber-300">{reviews.filter((r) => r.isSeeding).length}</strong> đánh giá bị gắn cờ</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              onClick={() => setCityLocation('Quảng Ngãi (Bình Sơn)', { lat: 15.3405, lng: 108.9212 })}
-              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
-                locationName.includes('Quảng Ngãi')
-                  ? 'bg-white text-orange-800'
-                  : 'bg-orange-700/60 hover:bg-orange-700 text-white'
-              }`}
-            >
-              📍 Quảng Ngãi
-            </button>
-            <button
-              onClick={() => setCityLocation('Hà Nội', { lat: 21.028511, lng: 105.854167 })}
-              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
-                locationName === 'Hà Nội'
-                  ? 'bg-white text-orange-800'
-                  : 'bg-orange-700/60 hover:bg-orange-700 text-white'
-              }`}
-            >
-              Hà Nội
-            </button>
-            <button
-              onClick={() => setCityLocation('TP. Hồ Chí Minh', { lat: 10.77123, lng: 106.69248 })}
-              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
-                locationName === 'TP. Hồ Chí Minh'
-                  ? 'bg-white text-orange-800'
-                  : 'bg-orange-700/60 hover:bg-orange-700 text-white'
-              }`}
-            >
-              TP.HCM
-            </button>
-            <button
-              onClick={() => setCityLocation('Đà Nẵng', { lat: 16.068, lng: 108.245 })}
-              className={`px-1.5 py-0.2 rounded text-[10px] font-bold transition ${
-                locationName === 'Đà Nẵng'
-                  ? 'bg-white text-orange-800'
-                  : 'bg-orange-700/60 hover:bg-orange-700 text-white'
-              }`}
-            >
-              Đà Nẵng
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         
