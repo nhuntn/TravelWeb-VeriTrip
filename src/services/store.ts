@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { INITIAL_PLACES, INITIAL_REVIEWS, INITIAL_USERS } from '../data/initialData';
 import { AIAnalysisResult, Place, Review, User } from '../types';
 
@@ -163,6 +163,7 @@ function mapRowToReview(row: any): Review {
 // -------------------------------------------------------------
 
 export async function getUsers(): Promise<User[]> {
+  if (!isSupabaseConfigured) return memoryUsers;
   try {
     const { data, error } = await supabase.from('users').select('*');
     if (!error && data && data.length > 0) {
@@ -175,6 +176,10 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function getCurrentUser(): Promise<User | null> {
+  if (!isSupabaseConfigured) {
+    if (!currentSessionUserId) return null;
+    return memoryUsers.find((u) => u.uid === currentSessionUserId) || null;
+  }
   try {
     const { data: { session } } = await supabase.auth.getSession();
     const activeUid = session?.user?.id || currentSessionUserId;
@@ -227,6 +232,7 @@ export async function setCurrentUserId(uid: string): Promise<void> {
 
 export async function logoutUser(): Promise<void> {
   currentSessionUserId = null;
+  if (!isSupabaseConfigured) return;
   try {
     await supabase.auth.signOut();
   } catch (err) {
@@ -243,21 +249,23 @@ export async function loginUser(email: string, password?: string): Promise<User>
 
   let supabaseAuthUser: any = null;
 
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password: pwd,
-    });
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: pwd,
+      });
 
-    if (error) {
-      if (error.message?.toLowerCase().includes('invalid login credentials')) {
-        throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.');
+      if (error) {
+        if (error.message?.toLowerCase().includes('invalid login credentials')) {
+          throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.');
+        }
+        throw new Error(error.message || 'Lỗi đăng nhập qua Supabase Auth.');
       }
-      throw new Error(error.message || 'Lỗi đăng nhập qua Supabase Auth.');
+      supabaseAuthUser = data.user;
+    } catch (err: any) {
+      throw new Error(err.message || 'Không thể kết nối máy chủ xác thực. Vui lòng thử lại.');
     }
-    supabaseAuthUser = data.user;
-  } catch (err: any) {
-    throw new Error(err.message || 'Không thể kết nối máy chủ xác thực. Vui lòng thử lại.');
   }
 
   const users = await getUsers();
@@ -281,6 +289,20 @@ export async function loginUser(email: string, password?: string): Promise<User>
       role: 'user',
     };
     await updateUser(user);
+  } else if (!isSupabaseConfigured) {
+    // Demo local auth fallback
+    const username = normalizedEmail.split('@')[0];
+    user = {
+      uid: 'usr_' + crypto.randomUUID(),
+      email: normalizedEmail,
+      username: username.charAt(0).toUpperCase() + username.slice(1),
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(username)}`,
+      strikes: 0,
+      isBanned: false,
+      banUntil: null,
+      role: 'user',
+    };
+    memoryUsers.push(user);
   } else {
     throw new Error('Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại thông tin.');
   }
@@ -308,37 +330,42 @@ export async function registerUser(data: {
   }
 
   let uid: string | null = null;
-  try {
-    const { data: authData, error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password: pwd,
-      options: {
-        data: {
-          username: data.username.trim(),
-          avatar: data.avatar,
+  if (isSupabaseConfigured) {
+    try {
+      const { data: authData, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password: pwd,
+        options: {
+          data: {
+            username: data.username.trim(),
+            avatar: data.avatar,
+          },
         },
-      },
-    });
+      });
 
-    if (error) {
-      if (error.message?.toLowerCase().includes('already registered')) {
-        throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
+      if (error) {
+        if (error.message?.toLowerCase().includes('already registered')) {
+          throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
+        }
+        throw new Error(error.message || 'Lỗi khi đăng ký với Supabase Auth.');
       }
-      throw new Error(error.message || 'Lỗi khi đăng ký với Supabase Auth.');
-    }
 
-    if (authData.user) {
-      if (authData.user.identities && authData.user.identities.length === 0) {
-        throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
+      if (authData.user) {
+        if (authData.user.identities && authData.user.identities.length === 0) {
+          throw new Error('Email này đã được đăng ký. Vui lòng chuyển sang tab Đăng nhập.');
+        }
+        uid = authData.user.id;
       }
-      uid = authData.user.id;
+    } catch (err: any) {
+      throw new Error(err.message || 'Không thể đăng ký tài khoản qua Supabase Auth.');
     }
-  } catch (err: any) {
-    throw new Error(err.message || 'Không thể đăng ký tài khoản qua Supabase Auth.');
+  } else {
+    // Local fallback UID
+    uid = 'usr_' + crypto.randomUUID();
   }
 
   if (!uid) {
-    throw new Error('Đăng ký thất bại: Không tạo được ID người dùng hợp lệ từ Supabase.');
+    throw new Error('Đăng ký thất bại: Không tạo được ID người dùng hợp lệ.');
   }
 
   const newUser: User = {
@@ -361,33 +388,35 @@ export async function registerUser(data: {
 
 export async function updateUser(updatedUser: User): Promise<void> {
   // Sanitize via server endpoint to prevent privilege escalation
-  try {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const res = await fetch('/api/users/update-profile', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        uid: updatedUser.uid,
-        email: updatedUser.email,
-        username: updatedUser.username,
-        avatar: updatedUser.avatar,
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.profile) {
-        updatedUser.username = data.profile.username;
-        updatedUser.avatar = data.profile.avatar;
+  if (isSupabaseConfigured) {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
+
+      const res = await fetch('/api/users/update-profile', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          uid: updatedUser.uid,
+          email: updatedUser.email,
+          username: updatedUser.username,
+          avatar: updatedUser.avatar,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.profile) {
+          updatedUser.username = data.profile.username;
+          updatedUser.avatar = data.profile.avatar;
+        }
+      }
+    } catch (e) {
+      // Continue with local update if offline
     }
-  } catch (e) {
-    // Continue with local update if offline
   }
 
   const idx = memoryUsers.findIndex((u) => u.uid === updatedUser.uid || u.email.toLowerCase() === updatedUser.email.toLowerCase());
@@ -396,6 +425,8 @@ export async function updateUser(updatedUser: User): Promise<void> {
   } else {
     memoryUsers.push(updatedUser);
   }
+
+  if (!isSupabaseConfigured) return;
 
   // Only attempt upsert to public.users if updatedUser.uid is a valid UUID to prevent FK errors with auth.users
   if (!isValidUUID(updatedUser.uid)) {
@@ -420,7 +451,7 @@ export async function updateUser(updatedUser: User): Promise<void> {
 // -------------------------------------------------------------
 
 async function safeUpsertPlaces(rows: any[]) {
-  if (!rows || rows.length === 0) return;
+  if (!isSupabaseConfigured || !rows || rows.length === 0) return;
   const { error } = await supabase.from('places').upsert(rows, { onConflict: 'id' });
   if (error) {
     if (error.message?.includes('owner_id') || error.code === 'PGRST204' || String(error.message).includes('column')) {
@@ -436,6 +467,7 @@ async function safeUpsertPlaces(rows: any[]) {
 }
 
 export async function syncAllPlacesToSupabase(placesToSync?: Place[]): Promise<void> {
+  if (!isSupabaseConfigured) return;
   const targetPlaces = placesToSync || memoryPlaces;
   if (!targetPlaces || targetPlaces.length === 0) return;
 
@@ -468,28 +500,30 @@ export async function syncAllPlacesToSupabase(placesToSync?: Place[]): Promise<v
 export async function getPlaces(): Promise<Place[]> {
   let places: Place[] = memoryPlaces;
 
-  try {
-    const { data, error } = await supabase.from('places').select('*');
-    if (!error && data && data.length > 0) {
-      places = data.map(mapRowToPlace);
-      memoryPlaces = places;
-      saveStoredPlaces(places);
-    } else if (!error && (!data || data.length === 0)) {
-      if (!hasSeededBefore()) {
-        await syncAllPlacesToSupabase(INITIAL_PLACES);
-        places = INITIAL_PLACES;
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase.from('places').select('*');
+      if (!error && data && data.length > 0) {
+        places = data.map(mapRowToPlace);
         memoryPlaces = places;
         saveStoredPlaces(places);
-        markAsSeeded();
-      } else {
-        places = [];
-        memoryPlaces = [];
-        saveStoredPlaces([]);
+      } else if (!error && (!data || data.length === 0)) {
+        if (!hasSeededBefore()) {
+          await syncAllPlacesToSupabase(INITIAL_PLACES);
+          places = INITIAL_PLACES;
+          memoryPlaces = places;
+          saveStoredPlaces(places);
+          markAsSeeded();
+        } else {
+          places = [];
+          memoryPlaces = [];
+          saveStoredPlaces([]);
+        }
       }
+    } catch (err) {
+      console.warn('Error fetching places directly from Supabase:', err);
+      places = memoryPlaces;
     }
-  } catch (err) {
-    console.warn('Error fetching places directly from Supabase:', err);
-    places = memoryPlaces;
   }
 
   const reviews = await getReviews();
@@ -620,6 +654,7 @@ export async function updatePlace(updatedPlace: Place, currentUserUid?: string):
 // -------------------------------------------------------------
 
 export async function syncAllReviewsToSupabase(reviewsToSync?: Review[]): Promise<void> {
+  if (!isSupabaseConfigured) return;
   const targetReviews = reviewsToSync || memoryReviews;
   if (!targetReviews || targetReviews.length === 0) return;
 
@@ -651,31 +686,33 @@ export async function syncAllReviewsToSupabase(reviewsToSync?: Review[]): Promis
 export async function getReviews(placeId?: string): Promise<Review[]> {
   let reviews: Review[] = memoryReviews;
 
-  try {
-    const { data, error } = await supabase
-      .from('reviews')
-      .select('*, users:user_id(username, avatar)');
-    if (!error && data && data.length > 0) {
-      reviews = data.map(mapRowToReview);
-      memoryReviews = reviews;
-      saveStoredReviews(reviews);
-    } else if (!error && (!data || data.length === 0)) {
-      // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng VÀ chưa từng seed trước đó
-      if (!hasSeededBefore()) {
-        await syncAllReviewsToSupabase(INITIAL_REVIEWS);
-        reviews = INITIAL_REVIEWS;
+  if (isSupabaseConfigured) {
+    try {
+      const { data, error } = await supabase
+        .from('reviews')
+        .select('*, users:user_id(username, avatar)');
+      if (!error && data && data.length > 0) {
+        reviews = data.map(mapRowToReview);
         memoryReviews = reviews;
         saveStoredReviews(reviews);
-        markAsSeeded();
-      } else {
-        reviews = [];
-        memoryReviews = [];
-        saveStoredReviews([]);
+      } else if (!error && (!data || data.length === 0)) {
+        // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng VÀ chưa từng seed trước đó
+        if (!hasSeededBefore()) {
+          await syncAllReviewsToSupabase(INITIAL_REVIEWS);
+          reviews = INITIAL_REVIEWS;
+          memoryReviews = reviews;
+          saveStoredReviews(reviews);
+          markAsSeeded();
+        } else {
+          reviews = [];
+          memoryReviews = [];
+          saveStoredReviews([]);
+        }
       }
+    } catch (err) {
+      console.warn('Error fetching reviews directly from Supabase:', err);
+      reviews = memoryReviews;
     }
-  } catch (err) {
-    console.warn('Error fetching reviews directly from Supabase:', err);
-    reviews = memoryReviews;
   }
 
   reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -706,8 +743,11 @@ export async function submitReviewWithAI(
     );
   }
 
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
+  let token: string | undefined = undefined;
+  if (isSupabaseConfigured) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    token = sessionData?.session?.access_token;
+  }
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {
@@ -790,38 +830,40 @@ export async function submitReviewWithAI(
       detectedKeywords: aiAnalysis.detectedKeywords,
     };
 
-    try {
-      await supabase.from('reviews').upsert({
-        id: reviewId,
-        place_id: placeId,
-        user_id: isValidUUID(currentUser.uid) ? currentUser.uid : null,
-        user_name: currentUser.username,
-        user_avatar: currentUser.avatar,
-        rating,
-        content,
-        is_seeding: aiAnalysis.isSeeding,
-        seeding_reason: aiAnalysis.seedingReason,
-        confidence_score: aiAnalysis.confidenceScore,
-        detected_keywords: aiAnalysis.detectedKeywords,
-        created_at: review.createdAt,
-      });
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('reviews').upsert({
+          id: reviewId,
+          place_id: placeId,
+          user_id: isValidUUID(currentUser.uid) ? currentUser.uid : null,
+          user_name: currentUser.username,
+          user_avatar: currentUser.avatar,
+          rating,
+          content,
+          is_seeding: aiAnalysis.isSeeding,
+          seeding_reason: aiAnalysis.seedingReason,
+          confidence_score: aiAnalysis.confidenceScore,
+          detected_keywords: aiAnalysis.detectedKeywords,
+          created_at: review.createdAt,
+        });
 
-      if (aiAnalysis.isSeeding && currentUser.uid && isValidUUID(currentUser.uid)) {
-        const { data: dbUser } = await supabase
-          .from('users')
-          .select('strikes, is_banned, ban_until')
-          .eq('id', currentUser.uid)
-          .maybeSingle();
+        if (aiAnalysis.isSeeding && currentUser.uid && isValidUUID(currentUser.uid)) {
+          const { data: dbUser } = await supabase
+            .from('users')
+            .select('strikes, is_banned, ban_until')
+            .eq('id', currentUser.uid)
+            .maybeSingle();
 
-        if (dbUser) {
-          currentUser.strikes = dbUser.strikes ?? currentUser.strikes;
-          currentUser.isBanned = dbUser.is_banned ?? currentUser.isBanned;
-          currentUser.banUntil = dbUser.ban_until ?? currentUser.banUntil;
-          userStatusUpdated = { ...currentUser };
+          if (dbUser) {
+            currentUser.strikes = dbUser.strikes ?? currentUser.strikes;
+            currentUser.isBanned = dbUser.is_banned ?? currentUser.isBanned;
+            currentUser.banUntil = dbUser.ban_until ?? currentUser.banUntil;
+            userStatusUpdated = { ...currentUser };
+          }
         }
+      } catch (sErr) {
+        console.warn('Supabase fallback submitReview error:', sErr);
       }
-    } catch (sErr) {
-      console.warn('Supabase fallback submitReview error:', sErr);
     }
   }
 

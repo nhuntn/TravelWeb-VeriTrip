@@ -23,7 +23,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { updateUser } from '../services/store';
-import { supabase } from '../services/supabaseClient';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface UserStatusModalProps {
   user: User | null;
@@ -203,7 +203,7 @@ export const UserStatusModal: React.FC<UserStatusModalProps> = ({
     }
 
     try {
-      if (newPassword.trim()) {
+      if (newPassword.trim() && isSupabaseConfigured) {
         const { error: pwdErr } = await supabase.auth.updateUser({ password: newPassword.trim() });
         if (pwdErr) {
           setSaveError(`Lỗi đổi mật khẩu Auth: ${pwdErr.message}`);

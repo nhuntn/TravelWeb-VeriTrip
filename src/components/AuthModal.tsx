@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { loginUser, registerUser } from '../services/store';
-import { supabase } from '../services/supabaseClient';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import {
   X,
   LogIn,
@@ -108,6 +108,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleGoogleLogin = async () => {
     setError(null);
+    if (!isSupabaseConfigured) {
+      setError('Đăng nhập Google yêu cầu cấu hình VITE_SUPABASE_URL và VITE_SUPABASE_ANON_KEY trong môi trường.');
+      return;
+    }
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
