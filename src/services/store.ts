@@ -4,6 +4,24 @@ import { AIAnalysisResult, Place, Review, User } from '../types';
 
 const STORAGE_PLACES_KEY = 'veritrip_places_v4';
 const STORAGE_REVIEWS_KEY = 'veritrip_reviews_v4';
+const SEEDED_MARKER_KEY = 'veritrip_has_seeded_v1';
+
+function hasSeededBefore(): boolean {
+  try {
+    return localStorage.getItem(SEEDED_MARKER_KEY) === 'true';
+  } catch (e) {
+    return false;
+  }
+}
+
+function markAsSeeded(): void {
+  try {
+    localStorage.setItem(SEEDED_MARKER_KEY, 'true');
+  } catch (e) {
+    console.warn('Error marking seed status in localStorage', e);
+  }
+}
+
 const LEGACY_KEYS = [
   'veritrip_places_v3',
   'veritrip_reviews_v3',
@@ -457,10 +475,17 @@ export async function getPlaces(): Promise<Place[]> {
       memoryPlaces = places;
       saveStoredPlaces(places);
     } else if (!error && (!data || data.length === 0)) {
-      await syncAllPlacesToSupabase(INITIAL_PLACES);
-      places = INITIAL_PLACES;
-      memoryPlaces = places;
-      saveStoredPlaces(places);
+      if (!hasSeededBefore()) {
+        await syncAllPlacesToSupabase(INITIAL_PLACES);
+        places = INITIAL_PLACES;
+        memoryPlaces = places;
+        saveStoredPlaces(places);
+        markAsSeeded();
+      } else {
+        places = [];
+        memoryPlaces = [];
+        saveStoredPlaces([]);
+      }
     }
   } catch (err) {
     console.warn('Error fetching places directly from Supabase:', err);
@@ -635,12 +660,18 @@ export async function getReviews(placeId?: string): Promise<Review[]> {
       memoryReviews = reviews;
       saveStoredReviews(reviews);
     } else if (!error && (!data || data.length === 0)) {
-      // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng,
-      // không seed khi có lỗi (mất mạng, RLS chặn...)
-      await syncAllReviewsToSupabase(INITIAL_REVIEWS);
-      reviews = INITIAL_REVIEWS;
-      memoryReviews = reviews;
-      saveStoredReviews(reviews);
+      // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng VÀ chưa từng seed trước đó
+      if (!hasSeededBefore()) {
+        await syncAllReviewsToSupabase(INITIAL_REVIEWS);
+        reviews = INITIAL_REVIEWS;
+        memoryReviews = reviews;
+        saveStoredReviews(reviews);
+        markAsSeeded();
+      } else {
+        reviews = [];
+        memoryReviews = [];
+        saveStoredReviews([]);
+      }
     }
   } catch (err) {
     console.warn('Error fetching reviews directly from Supabase:', err);
@@ -774,6 +805,21 @@ export async function submitReviewWithAI(
         detected_keywords: aiAnalysis.detectedKeywords,
         created_at: review.createdAt,
       });
+
+      if (aiAnalysis.isSeeding && currentUser.uid && isValidUUID(currentUser.uid)) {
+        const { data: dbUser } = await supabase
+          .from('users')
+          .select('strikes, is_banned, ban_until')
+          .eq('id', currentUser.uid)
+          .maybeSingle();
+
+        if (dbUser) {
+          currentUser.strikes = dbUser.strikes ?? currentUser.strikes;
+          currentUser.isBanned = dbUser.is_banned ?? currentUser.isBanned;
+          currentUser.banUntil = dbUser.ban_until ?? currentUser.banUntil;
+          userStatusUpdated = { ...currentUser };
+        }
+      }
     } catch (sErr) {
       console.warn('Supabase fallback submitReview error:', sErr);
     }
