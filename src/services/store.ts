@@ -1,9 +1,8 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { INITIAL_PLACES, INITIAL_REVIEWS, INITIAL_USERS } from '../data/initialData';
+import { INITIAL_PLACES, INITIAL_USERS } from '../data/initialData';
 import { AIAnalysisResult, Place, Review, User } from '../types';
 
 const STORAGE_PLACES_KEY = 'veritrip_places_v4';
-const STORAGE_REVIEWS_KEY = 'veritrip_reviews_v4';
 const SEEDED_MARKER_KEY = 'veritrip_has_seeded_v1';
 
 function hasSeededBefore(): boolean {
@@ -23,16 +22,20 @@ function markAsSeeded(): void {
 }
 
 const LEGACY_KEYS = [
-  'veritrip_places_v3',
+  'veritrip_reviews_v4',
   'veritrip_reviews_v3',
-  'veritrip_places_v2',
   'veritrip_reviews_v2',
+  'veritrip_reviews_v1',
+  'veritrip_reviews',
+  'veritrip_places_v3',
+  'veritrip_places_v2',
   'veritrip_places',
-   'veritrip_reviews',
 ];
 function clearLegacyLocalStorage(): void {
- try {
+  try {
     LEGACY_KEYS.forEach((key) => localStorage.removeItem(key));
+    localStorage.removeItem('veritrip_reviews_v4');
+    localStorage.removeItem('veritrip_reviews');
   } catch (e) {
     console.warn('Error clearing legacy localStorage keys', e);
   }
@@ -65,42 +68,15 @@ function saveStoredPlaces(places: Place[]): void {
   }
 }
 
-function getStoredReviews(): Review[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_REVIEWS_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((r: Review) => ({
-          ...r,
-          userId: (!r.userId || r.userId.startsWith('user_demo') || r.userId.startsWith('user_seeder')) ? 'community_member' : r.userId,
-          userName: (r.userName === 'An Nguyễn (Traveler)' || r.userName === 'Chốt Đơn Booking' || r.userName === 'Lê Hoàng' || r.userName === 'Marketing Team') ? 'Thành viên cộng đồng' : r.userName,
-        }));
-      }
-    }
-  } catch (e) {
-    console.warn('Error reading reviews from localStorage', e);
-  }
-  return [...INITIAL_REVIEWS];
-}
-
-function saveStoredReviews(reviews: Review[]): void {
-  try {
-    localStorage.setItem(STORAGE_REVIEWS_KEY, JSON.stringify(reviews));
-  } catch (e) {
-    console.warn('Error saving reviews to localStorage', e);
-  }
-}
-
 // Helper to check for standard UUID string format
 function isValidUUID(uuid: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
 }
 
-// Fallback initial data in memory if Supabase returns empty / disconnected
+// Data in memory
 let memoryUsers: User[] = [...INITIAL_USERS];
 let memoryPlaces: Place[] = getStoredPlaces();
-let memoryReviews: Review[] = getStoredReviews();
+let memoryReviews: Review[] = [];
 let currentSessionUserId: string | null = null;
 
 // Helper mapping functions between Supabase DB rows and App Interfaces
@@ -664,7 +640,7 @@ export async function updatePlace(updatedPlace: Place, currentUserUid?: string):
 }
 
 // -------------------------------------------------------------
-// REVIEWS METHODS (SUPABASE & LOCAL STORAGE)
+// REVIEWS METHODS (SUPABASE ONLY)
 // -------------------------------------------------------------
 
 export async function syncAllReviewsToSupabase(reviewsToSync?: Review[]): Promise<void> {
@@ -698,35 +674,35 @@ export async function syncAllReviewsToSupabase(reviewsToSync?: Review[]): Promis
 }
 
 export async function getReviews(placeId?: string): Promise<Review[]> {
-  let reviews: Review[] = memoryReviews;
+  let reviews: Review[] = [];
 
   if (isSupabaseConfigured) {
     try {
-      const { data, error } = await supabase
+      // First try select with join on users
+      let { data, error } = await supabase
         .from('reviews')
         .select('*, users:user_id(username, avatar)');
-      if (!error && data && data.length > 0) {
+
+      // If join fails due to relationship naming/schema differences, fallback to direct select
+      if (error && (error.code === 'PGRST200' || error.message?.includes('relationship') || error.message?.includes('users'))) {
+        const fallbackRes = await supabase.from('reviews').select('*');
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
+
+      if (!error && data) {
         reviews = data.map(mapRowToReview);
         memoryReviews = reviews;
-        saveStoredReviews(reviews);
-      } else if (!error && (!data || data.length === 0)) {
-        // Chỉ seed dữ liệu mẫu khi bảng Supabase THỰC SỰ rỗng VÀ chưa từng seed trước đó
-        if (!hasSeededBefore()) {
-          await syncAllReviewsToSupabase(INITIAL_REVIEWS);
-          reviews = INITIAL_REVIEWS;
-          memoryReviews = reviews;
-          saveStoredReviews(reviews);
-          markAsSeeded();
-        } else {
-          reviews = [];
-          memoryReviews = [];
-          saveStoredReviews([]);
-        }
+      } else if (error) {
+        console.warn('Error fetching reviews directly from Supabase:', error);
+        reviews = memoryReviews;
       }
     } catch (err) {
       console.warn('Error fetching reviews directly from Supabase:', err);
       reviews = memoryReviews;
     }
+  } else {
+    reviews = memoryReviews;
   }
 
   reviews.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -882,7 +858,6 @@ export async function submitReviewWithAI(
   }
 
   memoryReviews.unshift(review);
-  saveStoredReviews(memoryReviews);
 
   return {
     review,
@@ -895,9 +870,15 @@ export async function submitReviewWithAI(
 export async function resetDemoData(): Promise<void> {
   memoryUsers = [...INITIAL_USERS];
   memoryPlaces = [...INITIAL_PLACES];
-  memoryReviews = [...INITIAL_REVIEWS];
+  memoryReviews = [];
   saveStoredPlaces(memoryPlaces);
-  saveStoredReviews(memoryReviews);
+  try {
+    localStorage.removeItem('veritrip_reviews_v4');
+    localStorage.removeItem('veritrip_reviews_v3');
+    localStorage.removeItem('veritrip_reviews_v2');
+    localStorage.removeItem('veritrip_reviews_v1');
+    localStorage.removeItem('veritrip_reviews');
+  } catch (e) {}
   currentSessionUserId = null;
   try {
     await supabase.auth.signOut();
